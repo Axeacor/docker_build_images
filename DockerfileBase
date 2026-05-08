@@ -29,6 +29,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpng16-16 \
     bash \
     curl \
+    gcc \
+    python3-dev \
     ca-certificates \
     telnet \
     netcat-openbsd \
