@@ -7,6 +7,10 @@ on:
         description: '镜像标签 (如: py311-2026.Q2)'
         required: true
         default: 'py311-2026.Q2'
+      image_name:
+        description: '导出镜像名称 (如: galileo-icf-base-cpu)'
+        required: true
+        default: 'galileo-icf-base-cpu'
       platforms:
         description: '目标平台,多个用英文逗号分开 (linux/amd64,linux/arm64)'
         required: true
@@ -15,6 +19,7 @@ on:
         description: 'Release 标签名 (如: base-py311-2026.Q2)'
         required: true
         default: 'base-py311-2026.Q2'
+
 permissions:
   contents: write
 
@@ -33,7 +38,7 @@ jobs:
 
       - name: Build and export Docker images
         run: |
-          IMAGE_NAME="galileo-icf-base-cpu"
+          IMAGE_NAME="${{ github.event.inputs.image_name }}"
           TAG="${{ github.event.inputs.image_tag }}"
           PLATFORMS="${{ github.event.inputs.platforms }}"
 
@@ -45,7 +50,7 @@ jobs:
             docker buildx build \
               --platform "${platform}" \
               --file DockerfileBase \
-              --tag "${IMAGE_NAME}:${TAG}" \
+              --tag "${IMAGE_NAME}:${TAG}-${arch}" \
               --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
               .
             echo "========== Compressing ${arch} image =========="
@@ -59,6 +64,7 @@ jobs:
       - name: Generate Release Body
         id: release_body
         run: |
+          IMAGE_NAME="${{ github.event.inputs.image_name }}"
           TAG="${{ github.event.inputs.image_tag }}"
           PLATFORMS="${{ github.event.inputs.platforms }}"
           {
@@ -66,16 +72,20 @@ jobs:
             echo "## ICF Base Image Release"
             echo ""
             echo "- **Base image:** \`python:3.11-slim\`"
-            echo "- **Full image:** \`galileo-icf-base-cpu:${TAG}\`"
-            echo "- **Image tag:** \`${TAG}\`"
+            echo "- **Image name:** \`${IMAGE_NAME}\`"
+            echo "- **Image tags:** \`${IMAGE_NAME}:${TAG}-amd64\` / \`${IMAGE_NAME}:${TAG}-arm64\`"
             echo "- **Platforms:** \`${PLATFORMS}\`"
             echo "- **Dockerfile:** \`DockerfileBase\`"
             echo ""
             echo "### 使用方式"
             echo "\`\`\`bash"
-            echo "# 导入镜像"
-            echo "gzip -d galileo-icf-base-cpu-${TAG}-amd64.tar.gz"
-            echo "docker load -i galileo-icf-base-cpu-${TAG}-amd64.tar"
+            echo "# 导入 amd64 镜像"
+            echo "gzip -d ${IMAGE_NAME}-${TAG}-amd64.tar.gz"
+            echo "docker load -i ${IMAGE_NAME}-${TAG}-amd64.tar"
+            echo ""
+            echo "# 导入 arm64 镜像"
+            echo "gzip -d ${IMAGE_NAME}-${TAG}-arm64.tar.gz"
+            echo "docker load -i ${IMAGE_NAME}-${TAG}-arm64.tar"
             echo "\`\`\`"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
