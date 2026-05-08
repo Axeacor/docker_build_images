@@ -1,24 +1,24 @@
-# ============================================================
-# Galileo ICF 跨平台基础镜像
-# 支持架构: linux/amd64, linux/arm64
-# 构建命令:
-#   docker buildx build --platform linux/amd64,linux/arm64 \
-#     -t your-registry/icf-base:latest --push -f DockerfileBase .
-# ============================================================
-FROM python:3.11-slim
+# ====================== 构建参数 ======================
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
 
-LABEL maintainer="icf-team@envision-energy.com"
+# ====================== Builder 阶段（用于配置 pip） ======================
+FROM --platform=${BUILDPLATFORM} python:3.11-slim AS builder
+
+# 配置公司内部 PyPI 源
+RUN pip install --upgrade pip && \
+    pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
+    pip config set global.trusted-host repo.pe2.cc
+
+# ====================== 最终基础镜像 ======================
+FROM --platform=${TARGETPLATFORM} python:3.11-slim
+
+LABEL maintainer="galileo-team@envision-energy.com"
 LABEL version="2026.2"
-LABEL description="Galileo ICF cross-platform base image for CPU algorithms"
+LABEL description="Galileo Apps Basic Image With Python"
 LABEL python_version="3.11"
 
-# 系统依赖
-#   libgomp1                    - OpenMP 运行时，numpy/scipy/sklearn 矩阵运算需要
-#   libglib2.0-0                - opencv-python-headless 运行时依赖
-#   libsm6/libxext6/libxrender1 - X11 库，保留兼容性
-#   libjpeg62-turbo             - Pillow JPEG 解码
-#   libpng16-16                 - Pillow PNG 解码
-#   其余为运维调试工具
+# 系统运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libglib2.0-0 \
@@ -35,9 +35,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iputils-ping \
     gosu \
     vim \
-    && rm -rf /var/lib/apt/lists/*
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
+    && locale-gen zh_CN.UTF-8 \
+    && update-locale LANG=zh_CN.UTF-8 \
+    && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment
 
-# pip 配置（内部镜像源）
-RUN pip3 install --upgrade pip && \
-    pip3 config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
-    pip3 config set global.trusted-host repo.pe2.cc
+# 环境变量
+ENV LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=UTC
+    
+# 复制 pip 配置
+COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
+
+# 设置工作目录（推荐保留）
+WORKDIR /app
+
+CMD ["bash"]
