@@ -1,0 +1,54 @@
+# ====================== 构建参数 ======================
+ARG BUILDPLATFORM
+ARG TARGETPLATFORM
+
+# ====================== Builder 阶段（用于配置 pip） ======================
+FROM --platform=${BUILDPLATFORM} python:3.9.25-slim AS builder
+
+# 配置公司内部 PyPI 源
+RUN pip install --upgrade pip && \
+    pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
+    pip config set global.trusted-host repo.pe2.cc
+
+# ====================== 最终基础镜像 ======================
+FROM --platform=${TARGETPLATFORM} python:3.9.25-slim
+
+
+# 系统运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libjpeg62-turbo \
+    libpng16-16 \
+    bash \
+    curl \
+    gcc \
+    python3-dev \
+    ca-certificates \
+    telnet \
+    netcat-openbsd \
+    iputils-ping \
+    gosu \
+    vim \
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
+    && locale-gen zh_CN.UTF-8 \
+    && update-locale LANG=zh_CN.UTF-8 \
+    && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment
+
+# 环境变量
+ENV LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=UTC
+    
+# 复制 pip 配置
+COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
+
+# 设置工作目录（推荐保留）
+WORKDIR /app
+
+CMD ["bash"]
