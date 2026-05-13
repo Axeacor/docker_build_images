@@ -3,6 +3,14 @@ name: Build-DockerfileBase-Release
 on:
   workflow_dispatch:
     inputs:
+      dockerfile:
+        description: '选择要构建的 Dockerfile'
+        required: true
+        type: choice
+        options:
+          - DockerfileBase
+          - DockerfileBase3.6
+          - DockerfileBase3.9
       image_tag:
         description: '镜像标签 (如: py311-2026.Q2)'
         required: true
@@ -41,15 +49,15 @@ jobs:
           IMAGE_NAME="${{ github.event.inputs.image_name }}"
           TAG="${{ github.event.inputs.image_tag }}"
           PLATFORMS="${{ github.event.inputs.platforms }}"
+          DOCKERFILE="${{ github.event.inputs.dockerfile }}"
 
           IFS=',' read -r -a platform_array <<< "$PLATFORMS"
           for platform in "${platform_array[@]}"; do
-            # linux/amd64 -> amd64, linux/arm64 -> arm64
             arch="${platform##*/}"
-            echo "========== Building for ${platform} =========="
+            echo "========== Building ${DOCKERFILE} for ${platform} =========="
             docker buildx build \
               --platform "${platform}" \
-              --file DockerfileBase \
+              --file "${DOCKERFILE}" \
               --tag "${IMAGE_NAME}:${TAG}-${arch}" \
               --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
               .
@@ -67,15 +75,15 @@ jobs:
           IMAGE_NAME="${{ github.event.inputs.image_name }}"
           TAG="${{ github.event.inputs.image_tag }}"
           PLATFORMS="${{ github.event.inputs.platforms }}"
+          DOCKERFILE="${{ github.event.inputs.dockerfile }}"
           {
             echo "body<<EOF"
             echo "## ICF Base Image Release"
             echo ""
-            echo "- **Base image:** \`python:3.11-slim\`"
+            echo "- **Dockerfile:** \`${DOCKERFILE}\`"
             echo "- **Image name:** \`${IMAGE_NAME}\`"
             echo "- **Image tags:** \`${IMAGE_NAME}:${TAG}-amd64\` / \`${IMAGE_NAME}:${TAG}-arm64\`"
             echo "- **Platforms:** \`${PLATFORMS}\`"
-            echo "- **Dockerfile:** \`DockerfileBase\`"
             echo ""
             echo "### 使用方式"
             echo "\`\`\`bash"
