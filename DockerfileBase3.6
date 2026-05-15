@@ -3,7 +3,7 @@ ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 
 # ====================== Builder 阶段（用于配置 pip） ======================
-FROM --platform=${BUILDPLATFORM} python:3.6-slim AS builder
+FROM --platform=${BUILDPLATFORM} python:3.6.8-alpine3.10 AS builder
 
 # 配置公司内部 PyPI 源
 RUN pip install --upgrade pip && \
@@ -11,7 +11,7 @@ RUN pip install --upgrade pip && \
     pip config set global.trusted-host repo.pe2.cc
 
 # ====================== 最终基础镜像 ======================
-FROM --platform=${TARGETPLATFORM} python:3.6-slim
+FROM --platform=${TARGETPLATFORM} python:3.6.8-alpine3.10
 
 
 # 系统运行时依赖
