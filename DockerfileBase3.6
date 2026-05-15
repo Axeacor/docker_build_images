@@ -13,13 +13,14 @@ RUN pip install --upgrade pip && \
 # ====================== 最终基础镜像 ======================
 FROM --platform=${TARGETPLATFORM} python:3.6.8-slim
 
+RUN sed -i 's|deb.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
+    sed -i 's|security.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
+    sed -i '/stretch-updates/d' /etc/apt/sources.list
+
+# 2. 更新并安装旧版密钥包 (debian-archive-keyring)
+#    此时源已经是归档源，可以正常连接
 RUN apt-get update && \
     apt-get install -y --no-install-recommends debian-archive-keyring && \
-    # 2. 修改源指向归档地址 (archive.debian.org)
-    #    替换所有源地址
-    sed -i 's|deb.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i 's|security.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
-    sed -i '/stretch-updates/d' /etc/apt/sources.list && \
     # 3. 再次更新，此时使用归档源和新安装的密钥
     #    必须添加 --allow-releaseinfo-change 以允许发行版信息变更
     apt-get -o Acquire::Check-Valid-Until=false update --allow-releaseinfo-change
