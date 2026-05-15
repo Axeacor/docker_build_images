@@ -13,13 +13,12 @@ RUN pip install --upgrade pip && \
 # ====================== 最终基础镜像 ======================
 FROM --platform=${TARGETPLATFORM} python:3.6.8-slim
 
-RUN printf "deb http://archive.debian.org/debian stretch main\n\
-deb http://archive.debian.org/debian-security stretch/updates main\n" \
-> /etc/apt/sources.list
+RUN echo "deb http://archive.debian.org/debian stretch main contrib non-free" > /etc/apt/sources.list \
+ && echo "deb http://archive.debian.org/debian-security stretch/updates main contrib non-free" >> /etc/apt/sources.list
 
-# 关闭过期校验 + 更新
-RUN apt-get -o Acquire::Check-Valid-Until=false \
-           -o Acquire::AllowInsecureRepositories=true update
+# 2️⃣ 关闭过期校验
+RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid \
+ && echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid
 # 系统运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
