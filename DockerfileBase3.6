@@ -26,7 +26,7 @@ RUN rm -rf /var/lib/apt/lists/* \
 
 
 RUN apt-get -o Acquire::CompressionTypes::Order::=gz update && \
-    apt-get install -y --allow-unauthenticated --no-install-recommendss \
+    apt-get install -y --allow-unauthenticated --no-install-recommends \
     libgomp1 \
     libglib2.0-0 \
     libsm6 \
