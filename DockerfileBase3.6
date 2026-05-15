@@ -16,11 +16,17 @@ FROM --platform=${TARGETPLATFORM} python:3.6.8-slim
 RUN echo "deb http://archive.debian.org/debian stretch main contrib non-free" > /etc/apt/sources.list \
  && echo "deb http://archive.debian.org/debian-security stretch/updates main contrib non-free" >> /etc/apt/sources.list
 
-# 2️⃣ 关闭过期校验
-RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid \
- && echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid
-# 系统运行时依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 2️⃣ 关闭过期与签名校验（必须）
+RUN echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99insecure \
+ && echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99insecure \
+ && echo 'Acquire::AllowDowngradeToInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99insecure
+
+RUN rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /var/lib/apt/lists/partial
+
+
+RUN apt-get -o Acquire::CompressionTypes::Order::=gz update && \
+    apt-get install -y --allow-unauthenticated --no-install-recommendss \
     libgomp1 \
     libglib2.0-0 \
     libsm6 \
