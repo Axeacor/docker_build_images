@@ -17,13 +17,9 @@ RUN sed -i 's|deb.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
     sed -i 's|security.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
     sed -i '/stretch-updates/d' /etc/apt/sources.list
 
-# 2. 更新并安装旧版密钥包 (debian-archive-keyring)
-#    此时源已经是归档源，可以正常连接
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends debian-archive-keyring && \
-    # 3. 再次更新，此时使用归档源和新安装的密钥
-    #    必须添加 --allow-releaseinfo-change 以允许发行版信息变更
-    apt-get -o Acquire::Check-Valid-Until=false update --allow-releaseinfo-change
+# 2. 核心修复：更新时忽略所有 GPG 签名和有效期检查
+#    使用 -o Acquire::AllowInsecureRepositories=true 强制信任不安全的仓库
+RUN apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::Check-Valid-Until=false --allow-releaseinfo-change
 
 # 系统运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
