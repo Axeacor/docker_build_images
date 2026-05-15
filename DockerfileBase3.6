@@ -19,7 +19,7 @@ RUN sed -i 's|deb.debian.org|archive.debian.org|g' /etc/apt/sources.list && \
 
 # 2. 核心修复：更新时忽略所有 GPG 签名和有效期检查
 #    使用 -o Acquire::AllowInsecureRepositories=true 强制信任不安全的仓库
-RUN apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::Check-Valid-Until=false --allow-releaseinfo-change
+RUN apt-get update --allow-releaseinfo-change -o Acquire::AllowInsecureRepositories=true -o Acquire::Check-Valid-Until=false
 
 # 系统运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
