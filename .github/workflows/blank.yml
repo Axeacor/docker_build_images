@@ -11,6 +11,7 @@ on:
           - DockerfileBase
           - DockerfileBase3.6
           - DockerfileBase3.9
+          - Dockerfile-centos-node
       image_tag:
         description: '镜像标签 (如: py311-2026.Q2)'
         required: true
