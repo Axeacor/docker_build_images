@@ -8,7 +8,7 @@ on:
         required: true
         type: choice
         options:
-          - Dockerfile-py314-ubuntu1804
+          - DockerfileBasepy314
       python_version:
         description: 'Python 版本号 (如: 3.14.0)'
         required: true
