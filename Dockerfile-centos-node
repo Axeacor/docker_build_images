@@ -60,11 +60,6 @@ RUN mkdir -p /root/.fonts \
     /home/envuser/gw-report-engine-node/fonts_patch \
     /usr/local/node
 
-# ✅ 拷贝字体
-COPY fonts_patch/fonts.zip /home/envuser/gw-report-engine-node/fonts_patch/fonts.zip
-
-RUN unzip /home/envuser/gw-report-engine-node/fonts_patch/fonts.zip -d /root/.fonts/
-
 # ✅ 拷贝 Node ARM64 包
 COPY node-v10.13.0-linux-arm64.tar.gz /tmp/
 
