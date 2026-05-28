@@ -33,7 +33,7 @@ jobs:
             echo "========== Building for ${platform} =========="
             docker buildx build \
               --platform "${platform}" \
-              --file Dockerfile-py314-slim \
+              --file DockerfileBasepy314 \
               --tag py314-builder:${arch} \
               --output "type=docker,dest=py314-builder-${arch}.tar" \
               .
