@@ -1,41 +1,131 @@
-name: Build Python3.14 Builder Image
+name: Build-Py314-Builder-Release
 
 on:
   workflow_dispatch:
     inputs:
+      dockerfile:
+        description: '选择要构建的 Dockerfile'
+        required: true
+        type: choice
+        options:
+          - Dockerfile-py314-ubuntu1804
       python_version:
-        description: 'Python 版本号'
+        description: 'Python 版本号 (如: 3.14.0)'
         required: true
         default: '3.14.0'
       image_tag:
-        description: '镜像 Tag'
+        description: '镜像标签 (如: py314-ubuntu1804-2026.Q2)'
         required: true
-        default: 'py314-ubuntu1804'
+        default: 'py314-ubuntu1804-2026.Q2'
+      image_name:
+        description: '导出镜像名称 (如: py314-builder)'
+        required: true
+        default: 'py314-builder'
+      platforms:
+        description: '目标平台,多个用英文逗号分开 (linux/amd64,linux/arm64)'
+        required: true
+        default: 'linux/amd64'
+      release_tag:
+        description: 'Release 标签名 (如: py314-ubuntu1804-2026.Q2)'
+        required: true
+        default: 'py314-ubuntu1804-2026.Q2'
+
+permissions:
+  contents: write
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
+  build_and_release:
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Set up QEMU (多架构支持)
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Build and export Docker images
+        run: |
+          IMAGE_NAME="${{ github.event.inputs.image_name }}"
+          TAG="${{ github.event.inputs.image_tag }}"
+          PLATFORMS="${{ github.event.inputs.platforms }}"
+          DOCKERFILE="${{ github.event.inputs.dockerfile }}"
+          PYTHON_VERSION="${{ github.event.inputs.python_version }}"
 
-      - name: Build and Push
-        uses: docker/build-push-action@v5
+          IFS=',' read -r -a platform_array <<< "$PLATFORMS"
+          for platform in "${platform_array[@]}"; do
+            arch="${platform##*/}"
+            echo "========== Building ${DOCKERFILE} for ${platform} =========="
+            docker buildx build \
+              --platform "${platform}" \
+              --file "${DOCKERFILE}" \
+              --build-arg PYTHON_VERSION="${PYTHON_VERSION}" \
+              --tag "${IMAGE_NAME}:${TAG}-${arch}" \
+              --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+              .
+            echo "========== Compressing ${arch} image =========="
+            gzip -c "${IMAGE_NAME}-${TAG}-${arch}.tar" > "${IMAGE_NAME}-${TAG}-${arch}.tar.gz"
+            rm -f "${IMAGE_NAME}-${TAG}-${arch}.tar"
+          done
+
+      - name: List generated files
+        run: ls -lh *.tar.gz
+
+      - name: Generate Release Body
+        id: release_body
+        run: |
+          IMAGE_NAME="${{ github.event.inputs.image_name }}"
+          TAG="${{ github.event.inputs.image_tag }}"
+          PLATFORMS="${{ github.event.inputs.platforms }}"
+          DOCKERFILE="${{ github.event.inputs.dockerfile }}"
+          PYTHON_VERSION="${{ github.event.inputs.python_version }}"
+          {
+            echo "body<<EOF"
+            echo "## Python ${PYTHON_VERSION} Builder Image (Ubuntu 18.04)"
+            echo ""
+            echo "- **Dockerfile:** \`${DOCKERFILE}\`"
+            echo "- **Python:** \`${PYTHON_VERSION}\`"
+            echo "- **Base OS:** Ubuntu 18.04 (Bionic)"
+            echo "- **Image name:** \`${IMAGE_NAME}\`"
+            echo "- **Image tag:** \`${TAG}\`"
+            echo "- **Platforms:** \`${PLATFORMS}\`"
+            echo ""
+            echo "### 使用方式"
+            echo ""
+            echo "#### 1. 导入镜像"
+            echo "\`\`\`bash"
+            echo "gzip -d ${IMAGE_NAME}-${TAG}-amd64.tar.gz"
+            echo "docker load -i ${IMAGE_NAME}-${TAG}-amd64.tar"
+            echo "\`\`\`"
+            echo ""
+            echo "#### 2. 用容器编译下载依赖"
+            echo "\`\`\`bash"
+            echo "# 下载 wheel 包到本地 ./wheels 目录"
+            echo "docker run --rm -v \$(pwd)/wheels:/output ${IMAGE_NAME}:${TAG}-amd64 \\"
+            echo "    pip wheel --wheel-dir=/output <你的包名>"
+            echo ""
+            echo "# 或者交互式进入容器操作"
+            echo "docker run --rm -it -v \$(pwd)/wheels:/output ${IMAGE_NAME}:${TAG}-amd64 bash"
+            echo "\`\`\`"
+            echo ""
+            echo "#### 3. 本地安装编译好的 wheel"
+            echo "\`\`\`bash"
+            echo "pip install wheels/*.whl"
+            echo "\`\`\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create Release and Upload Assets
+        uses: softprops/action-gh-release@v2
         with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.inputs.image_tag }}:latest
-          build-args: |
-            PYTHON_VERSION=${{ github.event.inputs.python_version }}
-          platforms: linux/amd64
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "Python ${{ github.event.inputs.python_version }} Builder ${{ github.event.inputs.release_tag }}"
+          body: ${{ steps.release_body.outputs.body }}
+          draft: false
+          prerelease: false
+          files: |
+            *.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
