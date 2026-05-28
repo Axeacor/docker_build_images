@@ -5,10 +5,19 @@ ENV LANG=en_US.UTF-8 \
     NODE_HOME=/usr/local/node \
     PATH=/usr/local/node/bin:$PATH
 
-# 安装依赖
-RUN yum clean all && \
-    yum makecache && \
-    yum install -y \
+# ✅ 修复 CentOS 7 源（使用 vault）
+RUN rm -f /etc/yum.repos.d/*.repo && \
+    echo "[base]" > /etc/yum.repos.d/CentOS-Base.repo && \
+    echo "name=CentOS-7 - Base" >> /etc/yum.repos.d/CentOS-Base.repo && \
+    echo "baseurl=http://vault.centos.org/altarch/7.9.2009/os/aarch64/" >> /etc/yum.repos.d/CentOS-Base.repo && \
+    echo "gpgcheck=0" >> /etc/yum.repos.d/CentOS-Base.repo && \
+    echo "enabled=1" >> /etc/yum.repos.d/CentOS-Base.repo
+
+# ✅ 重新生成缓存
+RUN yum clean all && yum makecache
+
+# ✅ 安装依赖（去掉 .x86_64）
+RUN yum install -y \
         unzip \
         sudo \
         tar \
@@ -18,20 +27,20 @@ RUN yum clean all && \
         make \
         openssl \
         openssl-devel \
-        pango.x86_64 \
-        libXcomposite.x86_64 \
-        libXcursor.x86_64 \
-        libXdamage.x86_64 \
-        libXext.x86_64 \
-        libXi.x86_64 \
-        libXtst.x86_64 \
-        cups-libs.x86_64 \
-        libXScrnSaver.x86_64 \
-        libXrandr.x86_64 \
-        GConf2.x86_64 \
-        alsa-lib.x86_64 \
-        atk.x86_64 \
-        gtk3.x86_64 \
+        pango \
+        libXcomposite \
+        libXcursor \
+        libXdamage \
+        libXext \
+        libXi \
+        libXtst \
+        cups-libs \
+        libXScrnSaver \
+        libXrandr \
+        GConf2 \
+        alsa-lib \
+        atk \
+        gtk3 \
         ipa-gothic-fonts \
         xorg-x11-fonts-100dpi \
         xorg-x11-fonts-75dpi \
@@ -42,23 +51,26 @@ RUN yum clean all && \
     yum clean all && \
     rm -rf /var/cache/yum
 
-# 创建用户
+# ✅ 创建用户
 RUN useradd -u 1088 -m -s /bin/bash envuser && \
     echo "envuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-# 创建目录
+# ✅ 创建目录
 RUN mkdir -p /root/.fonts \
     /home/envuser/gw-report-engine-node/fonts_patch \
     /usr/local/node
 
-# 拷贝 Node 安装包
+# ✅ 拷贝字体
+COPY fonts_patch/fonts.zip /home/envuser/gw-report-engine-node/fonts_patch/fonts.zip
+
+RUN unzip /home/envuser/gw-report-engine-node/fonts_patch/fonts.zip -d /root/.fonts/
+
+# ✅ 拷贝 Node ARM64 包
 COPY node-v10.13.0-linux-arm64.tar.gz /tmp/
 
-# 安装 Node
 RUN tar -xzf /tmp/node-v10.13.0-linux-arm64.tar.gz -C /usr/local && \
     mv /usr/local/node-v10.13.0-linux-arm64/* /usr/local/node/ && \
-    rm -rf /tmp/node-v10.13.0-linux-arm64* && \
-    chown -R envuser:envuser /home/envuser
+    rm -rf /tmp/node-v10.13.0-linux-arm64*
 
 WORKDIR /home/envuser
 
