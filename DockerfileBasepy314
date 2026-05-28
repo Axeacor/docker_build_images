@@ -1,0 +1,55 @@
+# ====================== 构建参数 ======================
+ARG TARGETPLATFORM
+ARG PYTHON_VERSION=3.14.0
+
+# ====================== 单阶段：用于编译下载依赖 ======================
+FROM --platform=${TARGETPLATFORM} ubuntu:18.04
+
+ARG PYTHON_VERSION
+
+# 切换 apt 源（Ubuntu 18.04 已 EOL）
+RUN sed -i 's/archive.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list && \
+    sed -i 's/security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list
+
+# 安装编译工具链 + Python 编译依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    g++ \
+    gfortran \
+    wget \
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncursesw5-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    libffi-dev \
+    liblzma-dev \
+    tk-dev \
+    uuid-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 下载并编译安装 Python
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz \
+    && tar -xzf Python-${PYTHON_VERSION}.tgz \
+    && cd Python-${PYTHON_VERSION} \
+    && ./configure --enable-optimizations --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. \
+    && rm -rf Python-${PYTHON_VERSION} Python-${PYTHON_VERSION}.tgz \
+    && ln -sf /usr/local/bin/python3 /usr/local/bin/python \
+    && ln -sf /usr/local/bin/pip3 /usr/local/bin/pip
+
+# 配置公司内部 PyPI 源
+RUN pip install --upgrade pip && \
+    pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
+    pip config set global.trusted-host repo.pe2.cc
+
+WORKDIR /app
+
+CMD ["bash"]
