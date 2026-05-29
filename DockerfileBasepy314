@@ -8,9 +8,11 @@ FROM --platform=${BUILDPLATFORM} ubuntu:18.04 AS builder
 
 ARG PYTHON_VERSION
 
-# Ubuntu 18.04 已 EOL，切换到 old-releases
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
+# Ubuntu 18.04 已 EOL，重写源到 old-releases
+RUN printf "deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse\n\
+deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse\n\
+deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse\n" > /etc/apt/sources.list && \
+    printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -56,9 +58,11 @@ FROM --platform=${TARGETPLATFORM} ubuntu:18.04
 
 ARG PYTHON_VERSION
 
-# Ubuntu 18.04 已 EOL，切换到 old-releases
-RUN sed -i 's|http://archive.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
-    sed -i 's|http://security.ubuntu.com/ubuntu|http://old-releases.ubuntu.com/ubuntu|g' /etc/apt/sources.list && \
+# Ubuntu 18.04 已 EOL，重写源到 old-releases
+RUN printf "deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse\n\
+deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse\n\
+deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse\n" > /etc/apt/sources.list && \
+    printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
     libgomp1 \
@@ -105,7 +109,8 @@ RUN ldconfig && \
     ln -sf /usr/local/bin/python3.14 /usr/local/bin/python3 && \
     ln -sf /usr/local/bin/python3.14 /usr/local/bin/python && \
     ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip3 && \
-    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip
+    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip && \
+    mkdir -p /output
 
 # 环境变量
 ENV LANG=zh_CN.UTF-8 \
