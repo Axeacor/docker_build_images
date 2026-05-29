@@ -3,7 +3,7 @@ ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG PYTHON_VERSION=3.14.0
 
-# ====================== Builder 阶段（编译 Python + 配置 pip） ======================
+# ====================== Builder 阶段（在 Ubuntu 18.04 上编译 Python + 编译 pip 包） ======================
 FROM --platform=${BUILDPLATFORM} ubuntu:18.04 AS builder
 
 ARG PYTHON_VERSION
@@ -42,9 +42,10 @@ RUN apt-get install -y --no-install-recommends \
       liblzma-dev \
       libncurses5-dev \
       tk-dev \
-      uuid-dev
-
-RUN rm -rf /var/lib/apt/lists/*
+      uuid-dev \
+      pkg-config \
+      libhdf5-dev \
+      && rm -rf /var/lib/apt/lists/*
 
 # 编译安装 Python 3.14
 RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
@@ -57,11 +58,11 @@ RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VER
     cd / && rm -rf Python-${PYTHON_VERSION} Python-${PYTHON_VERSION}.tgz
 
 # 配置 pip 源
-RUN /usr/local/bin/python3.14 -m pip install --upgrade pip
-RUN /usr/local/bin/pip3.14 config set global.index-url http://repo.pe2.cc/repository/pypi/simple
-RUN /usr/local/bin/pip3.14 config set global.trusted-host repo.pe2.cc
+RUN /usr/local/bin/python3.14 -m pip install --upgrade pip && \
+    /usr/local/bin/pip3.14 config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
+    /usr/local/bin/pip3.14 config set global.trusted-host repo.pe2.cc
 
-# ====================== 最终基础镜像 ======================
+# ====================== 最终基础镜像（同样基于 Ubuntu 18.04，保证 GLIBC 一致） ======================
 FROM --platform=${TARGETPLATFORM} ubuntu:18.04
 
 ARG PYTHON_VERSION
@@ -87,36 +88,47 @@ RUN apt-get install -y --no-install-recommends \
       gcc \
       g++ \
       gfortran \
+      make \
       wget \
       ca-certificates \
       locales \
       zlib1g \
+      zlib1g-dev \
       libssl1.1 \
+      libssl-dev \
       libbz2-1.0 \
+      libbz2-dev \
       libreadline7 \
+      libreadline-dev \
       libsqlite3-0 \
+      libsqlite3-dev \
       libffi6 \
+      libffi-dev \
       liblzma5 \
+      liblzma-dev \
       libncurses5 \
-      libgomp1
+      libncurses5-dev \
+      libgomp1 \
+      libhdf5-dev \
+      pkg-config \
+      && rm -rf /var/lib/apt/lists/*
 
-RUN rm -rf /var/lib/apt/lists/*
+# locale 配置
+RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen && \
+    locale-gen zh_CN.UTF-8 && \
+    update-locale LANG=zh_CN.UTF-8 && \
+    echo 'LC_ALL=zh_CN.UTF-8' >> /etc/environment
 
-# locale 单独处理，避免和 apt 混在一起不好排错
-RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen
-RUN locale-gen zh_CN.UTF-8
-RUN update-locale LANG=zh_CN.UTF-8
-RUN echo 'LC_ALL=zh_CN.UTF-8' >> /etc/environment
-
-# 复制 Python
+# 复制 Python（在 Ubuntu 18.04 上编译的，GLIBC 兼容）
 COPY --from=builder /usr/local /usr/local
 
 # 创建软链接
-RUN ldconfig
-RUN ln -sf /usr/local/bin/python3.14 /usr/local/bin/python3
-RUN ln -sf /usr/local/bin/python3.14 /usr/local/bin/python
-RUN ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip3
-RUN ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip
+RUN ldconfig && \
+    ln -sf /usr/local/bin/python3.14 /usr/local/bin/python3 && \
+    ln -sf /usr/local/bin/python3.14 /usr/local/bin/python && \
+    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip3 && \
+    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip
+
 RUN mkdir -p /output
 
 # 环境变量
