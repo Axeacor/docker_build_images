@@ -8,15 +8,22 @@ FROM --platform=${BUILDPLATFORM} ubuntu:18.04 AS builder
 
 ARG PYTHON_VERSION
 
-# Ubuntu 18.04 已 EOL，重写源到 old-releases
+# 配置旧源
 RUN printf '%s\n' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
-    > /etc/apt/sources.list && \
-    printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
+    > /etc/apt/sources.list
+
+RUN printf '%s\n' \
+    'Acquire::Check-Valid-Until "false";' \
+    'Acquire::AllowInsecureRepositories "true";' \
+    'Acquire::AllowDowngradeToInsecureRepositories "true";' \
+    > /etc/apt/apt.conf.d/99no-check-valid
+
+RUN apt-get update
+
+RUN apt-get install -y --no-install-recommends \
       build-essential \
       wget \
       curl \
@@ -35,8 +42,9 @@ RUN printf '%s\n' \
       liblzma-dev \
       libncurses5-dev \
       tk-dev \
-      uuid-dev \
-    && rm -rf /var/lib/apt/lists/*
+      uuid-dev
+
+RUN rm -rf /var/lib/apt/lists/*
 
 # 编译安装 Python 3.14
 RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz && \
@@ -48,25 +56,32 @@ RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VER
     ldconfig && \
     cd / && rm -rf Python-${PYTHON_VERSION} Python-${PYTHON_VERSION}.tgz
 
-# 配置公司内部 PyPI 源
-RUN /usr/local/bin/python3.14 -m pip install --upgrade pip && \
-    /usr/local/bin/pip3.14 config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
-    /usr/local/bin/pip3.14 config set global.trusted-host repo.pe2.cc
+# 配置 pip 源
+RUN /usr/local/bin/python3.14 -m pip install --upgrade pip
+RUN /usr/local/bin/pip3.14 config set global.index-url http://repo.pe2.cc/repository/pypi/simple
+RUN /usr/local/bin/pip3.14 config set global.trusted-host repo.pe2.cc
 
 # ====================== 最终基础镜像 ======================
 FROM --platform=${TARGETPLATFORM} ubuntu:18.04
 
 ARG PYTHON_VERSION
 
-# Ubuntu 18.04 已 EOL，重写源到 old-releases
+# 配置旧源
 RUN printf '%s\n' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
     'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
-    > /etc/apt/sources.list && \
-    printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends \
+    > /etc/apt/sources.list
+
+RUN printf '%s\n' \
+    'Acquire::Check-Valid-Until "false";' \
+    'Acquire::AllowInsecureRepositories "true";' \
+    'Acquire::AllowDowngradeToInsecureRepositories "true";' \
+    > /etc/apt/apt.conf.d/99no-check-valid
+
+RUN apt-get update
+
+RUN apt-get install -y --no-install-recommends \
       bash \
       curl \
       gcc \
@@ -83,23 +98,26 @@ RUN printf '%s\n' \
       libffi6 \
       liblzma5 \
       libncurses5 \
-      libgomp1 \
-    && rm -rf /var/lib/apt/lists/* && \
-    sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen && \
-    locale-gen zh_CN.UTF-8 && \
-    update-locale LANG=zh_CN.UTF-8 && \
-    echo 'LC_ALL=zh_CN.UTF-8' >> /etc/environment
+      libgomp1
+
+RUN rm -rf /var/lib/apt/lists/*
+
+# locale 单独处理，避免和 apt 混在一起不好排错
+RUN sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen
+RUN locale-gen zh_CN.UTF-8
+RUN update-locale LANG=zh_CN.UTF-8
+RUN echo 'LC_ALL=zh_CN.UTF-8' >> /etc/environment
 
 # 复制 Python
 COPY --from=builder /usr/local /usr/local
 
 # 创建软链接
-RUN ldconfig && \
-    ln -sf /usr/local/bin/python3.14 /usr/local/bin/python3 && \
-    ln -sf /usr/local/bin/python3.14 /usr/local/bin/python && \
-    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip3 && \
-    ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip && \
-    mkdir -p /output
+RUN ldconfig
+RUN ln -sf /usr/local/bin/python3.14 /usr/local/bin/python3
+RUN ln -sf /usr/local/bin/python3.14 /usr/local/bin/python
+RUN ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip3
+RUN ln -sf /usr/local/bin/pip3.14 /usr/local/bin/pip
+RUN mkdir -p /output
 
 # 环境变量
 ENV LANG=zh_CN.UTF-8 \
@@ -111,7 +129,6 @@ ENV LANG=zh_CN.UTF-8 \
 # 复制 pip 配置
 COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
 
-# 设置工作目录
 WORKDIR /app
 
 CMD ["bash"]
