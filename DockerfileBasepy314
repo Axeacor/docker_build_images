@@ -1,5 +1,4 @@
 # ====================== 构建参数 ======================
-ARG TARGETPLATFORM
 ARG PYTHON_VERSION=3.14.0
 
 # ====================== Builder 阶段（在 Ubuntu 18.04 上编译 Python） ======================
@@ -7,26 +6,13 @@ FROM ubuntu:18.04 AS builder
 
 ARG PYTHON_VERSION
 
-# 根据架构配置对应的源（amd64 用 old-releases，arm64 用 ports）
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then \
-      printf '%s\n' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
-        > /etc/apt/sources.list; \
-    else \
-      printf '%s\n' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic main restricted universe multiverse' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic-updates main restricted universe multiverse' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic-security main restricted universe multiverse' \
-        > /etc/apt/sources.list; \
-    fi && \
-    printf '%s\n' \
-      'Acquire::Check-Valid-Until "false";' \
-      'Acquire::AllowInsecureRepositories "true";' \
-      'Acquire::AllowDowngradeToInsecureRepositories "true";' \
-      > /etc/apt/apt.conf.d/99no-check-valid && \
+# 配置源 + 安装依赖
+RUN echo 'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' > /etc/apt/sources.list && \
+    echo 'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
+    echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid && \
+    echo 'Acquire::AllowDowngradeToInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get update && \
@@ -74,26 +60,13 @@ FROM ubuntu:18.04
 
 ARG PYTHON_VERSION
 
-# 根据架构配置对应的源
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ] || [ "$ARCH" = "i386" ]; then \
-      printf '%s\n' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
-        'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
-        > /etc/apt/sources.list; \
-    else \
-      printf '%s\n' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic main restricted universe multiverse' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic-updates main restricted universe multiverse' \
-        'deb http://ports.ubuntu.com/ubuntu-ports bionic-security main restricted universe multiverse' \
-        > /etc/apt/sources.list; \
-    fi && \
-    printf '%s\n' \
-      'Acquire::Check-Valid-Until "false";' \
-      'Acquire::AllowInsecureRepositories "true";' \
-      'Acquire::AllowDowngradeToInsecureRepositories "true";' \
-      > /etc/apt/apt.conf.d/99no-check-valid && \
+# 配置源 + 安装依赖
+RUN echo 'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' > /etc/apt/sources.list && \
+    echo 'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' >> /etc/apt/sources.list && \
+    echo 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
+    echo 'Acquire::AllowInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid && \
+    echo 'Acquire::AllowDowngradeToInsecureRepositories "true";' >> /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get update && \
