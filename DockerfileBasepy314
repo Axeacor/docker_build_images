@@ -9,33 +9,33 @@ FROM --platform=${BUILDPLATFORM} ubuntu:18.04 AS builder
 ARG PYTHON_VERSION
 
 # Ubuntu 18.04 已 EOL，重写源到 old-releases
-RUN printf "deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse\n\
-deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse\n\
-deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse\n" > /etc/apt/sources.list && \
-    printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid && \
+RUN printf '%s\n' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
+    > /etc/apt/sources.list && \
+    printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    build-essential \
-    wget \
-    curl \
-    gcc \
-    g++ \
-    gfortran \
-    make \
-    libssl-dev \
-    zlib1g-dev \
-    libbz2-dev \
-    libreadline-dev \
-    libsqlite3-dev \
-    libncurses5-dev \
-    libgdbm-dev \
-    libnss3-dev \
-    libffi-dev \
-    liblzma-dev \
-    tk-dev \
-    uuid-dev \
-    xz-utils \
-    ca-certificates \
+      build-essential \
+      wget \
+      curl \
+      gcc \
+      g++ \
+      gfortran \
+      make \
+      xz-utils \
+      ca-certificates \
+      zlib1g-dev \
+      libssl-dev \
+      libbz2-dev \
+      libreadline-dev \
+      libsqlite3-dev \
+      libffi-dev \
+      liblzma-dev \
+      libncurses5-dev \
+      tk-dev \
+      uuid-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 编译安装 Python 3.14
@@ -59,47 +59,36 @@ FROM --platform=${TARGETPLATFORM} ubuntu:18.04
 ARG PYTHON_VERSION
 
 # Ubuntu 18.04 已 EOL，重写源到 old-releases
-RUN printf "deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse\n\
-deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse\n\
-deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse\n" > /etc/apt/sources.list && \
-    printf 'Acquire::Check-Valid-Until "false";\n' > /etc/apt/apt.conf.d/99no-check-valid && \
+RUN printf '%s\n' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic main restricted universe multiverse' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic-updates main restricted universe multiverse' \
+    'deb http://old-releases.ubuntu.com/ubuntu bionic-security main restricted universe multiverse' \
+    > /etc/apt/sources.list && \
+    printf '%s\n' 'Acquire::Check-Valid-Until "false";' > /etc/apt/apt.conf.d/99no-check-valid && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-    libgomp1 \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender1 \
-    libjpeg62-turbo \
-    libpng16-16 \
-    bash \
-    curl \
-    gcc \
-    g++ \
-    gfortran \
-    ca-certificates \
-    telnet \
-    netcat-openbsd \
-    iputils-ping \
-    gosu \
-    vim \
-    locales \
-    libssl1.1 \
-    zlib1g \
-    libbz2-1.0 \
-    libreadline7 \
-    libsqlite3-0 \
-    libncurses5 \
-    libgdbm5 \
-    libnss3 \
-    libffi6 \
-    liblzma5 \
-    tk \
-    && rm -rf /var/lib/apt/lists/* \
-    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
-    && locale-gen zh_CN.UTF-8 \
-    && update-locale LANG=zh_CN.UTF-8 \
-    && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment
+      bash \
+      curl \
+      gcc \
+      g++ \
+      gfortran \
+      wget \
+      ca-certificates \
+      locales \
+      zlib1g \
+      libssl1.1 \
+      libbz2-1.0 \
+      libreadline7 \
+      libsqlite3-0 \
+      libffi6 \
+      liblzma5 \
+      libncurses5 \
+      libgomp1 \
+    && rm -rf /var/lib/apt/lists/* && \
+    sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen && \
+    locale-gen zh_CN.UTF-8 && \
+    update-locale LANG=zh_CN.UTF-8 && \
+    echo 'LC_ALL=zh_CN.UTF-8' >> /etc/environment
 
 # 复制 Python
 COPY --from=builder /usr/local /usr/local
