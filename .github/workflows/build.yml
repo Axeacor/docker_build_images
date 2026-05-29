@@ -47,12 +47,21 @@ jobs:
           tag_name: py314-builder-${{ github.run_number }}
           name: "py314-builder #${{ github.run_number }}"
           body: |
-            Python 3.14 pip 下载专用镜像
+            Python 3.14 pip builder 镜像（基于 Ubuntu 18.04，GLIBC 2.27 兼容）
+
+            用于在 GLIBC 2.27 环境下从源码编译 pip 包，确保产出的 .so 不依赖更高版本 GLIBC。
 
             ```bash
             gzip -d py314-builder-amd64.tar.gz
             docker load -i py314-builder-amd64.tar
-            docker run --rm -v $(pwd)/wheels:/output py314-builder:amd64 pip wheel --wheel-dir=/output <包名>
+
+            # 从源码编译 wheel（关键：--no-binary :all: 强制源码编译）
+            docker run --rm -v $(pwd)/wheels:/output py314-builder:amd64 \
+              pip wheel --no-binary :all: --wheel-dir=/output <包名>
+
+            # 或直接安装到容器内使用
+            docker run --rm -v $(pwd)/site-packages:/usr/local/lib/python3.14/site-packages \
+              py314-builder:amd64 pip install --no-binary :all: <包名>
             ```
           files: |
             *.tar.gz
