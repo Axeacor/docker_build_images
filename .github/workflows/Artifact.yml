@@ -1,4 +1,4 @@
-name: Build-DockerfileBase-Release
+name: Artifact-Build-DockerfileBase
 
 on:
   workflow_dispatch:
