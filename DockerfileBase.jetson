@@ -48,9 +48,7 @@ ENV LANG=zh_CN.UTF-8 \
 # 清除 dusty-nv 镜像预设的 jetson-ai-lab 源配置
 RUN rm -f /etc/pip.conf && \
     rm -f /root/.config/pip/pip.conf && \
-    pip install --upgrade pip \
-        -i http://repo.pe2.cc/repository/pypi/simple \
-        --trusted-host repo.pe2.cc && \
+    pip install --upgrade pip 
     pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
     pip config set global.trusted-host repo.pe2.cc && \
     pip config set global.extra-index-url https://pypi.jetson-ai-lab.dev/jp6/cu128
