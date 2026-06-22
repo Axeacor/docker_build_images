@@ -1,0 +1,61 @@
+# ====================== Jetson AGX Orin 基础镜像 ======================
+# 基于 dusty-nv 维护的 Jetson 专用镜像（L4T r36 + CUDA 12.8 + ONNX Runtime）
+# 内置 Python 3.12（Ubuntu 24.04 系统默认），直接使用以保证与预装库兼容
+# GitHub: https://github.com/dusty-nv/jetson-containers
+FROM dustynv/onnxruntime:1.22-r36.4.0-cu128-24.04
+
+LABEL maintainer="galileo-team@envision-energy.com"
+LABEL version="2026.2"
+LABEL description="Galileo Apps Basic Image With GPU (Jetson AGX Orin)"
+LABEL python_version="3.12"
+LABEL l4t_version="r36.4.0"
+LABEL cuda_version="12.8"
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# ====================== 系统运行时依赖 ======================
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libjpeg-turbo8 \
+    libpng16-16 \
+    libsndfile1 \
+    bash \
+    curl \
+    ca-certificates \
+    telnet \
+    netcat-openbsd \
+    iputils-ping \
+    gosu \
+    vim \
+    locales \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
+    && locale-gen zh_CN.UTF-8 \
+    && update-locale LANG=zh_CN.UTF-8 \
+    && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment
+
+# ====================== 环境变量 ======================
+ENV LANG=zh_CN.UTF-8 \
+    LC_ALL=zh_CN.UTF-8 \
+    TZ=UTC \
+    OPENBLAS_NUM_THREADS=1
+
+# ====================== pip 配置（内部 PyPI 源） ======================
+# 清除 dusty-nv 镜像预设的 jetson-ai-lab 源配置
+RUN rm -f /etc/pip.conf && \
+    rm -f /root/.config/pip/pip.conf && \
+    pip install --upgrade pip \
+        -i http://repo.pe2.cc/repository/pypi/simple \
+        --trusted-host repo.pe2.cc && \
+    pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple && \
+    pip config set global.trusted-host repo.pe2.cc && \
+    pip config set global.extra-index-url https://pypi.jetson-ai-lab.dev/jp6/cu128
+
+# 设置工作目录
+WORKDIR /app
+
+CMD ["bash"]
