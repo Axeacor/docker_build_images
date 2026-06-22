@@ -80,7 +80,7 @@ jobs:
           DOCKERFILE="${{ github.event.inputs.dockerfile }}"
           {
             echo "body<<EOF"
-            echo "## ICF Base Image Release"
+            echo "##  Base Image Release"
             echo ""
             echo "- **Dockerfile:** \`${DOCKERFILE}\`"
             echo "- **Image name:** \`${IMAGE_NAME}\`"
@@ -90,12 +90,10 @@ jobs:
             echo "### 使用方式"
             echo "\`\`\`bash"
             echo "# 导入 amd64 镜像"
-            echo "gzip -d ${IMAGE_NAME}-${TAG}-amd64.tar.gz"
-            echo "docker load -i ${IMAGE_NAME}-${TAG}-amd64.tar"
+            echo "docker load -i ${IMAGE_NAME}-${TAG}-amd64.tar.gz"
             echo ""
             echo "# 导入 arm64 镜像"
-            echo "gzip -d ${IMAGE_NAME}-${TAG}-arm64.tar.gz"
-            echo "docker load -i ${IMAGE_NAME}-${TAG}-arm64.tar"
+            echo "docker load -i ${IMAGE_NAME}-${TAG}-arm64.tar.gz"
             echo "\`\`\`"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
@@ -104,11 +102,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
-          name: "Galileo ICF Base CPU ${{ github.event.inputs.release_tag }}"
+          name: "${{ github.event.inputs.release_tag }}"
           body: ${{ steps.release_body.outputs.body }}
           draft: false
           prerelease: false
           files: |
-            *.tar.gz
+            *64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
