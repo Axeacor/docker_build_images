@@ -1,0 +1,14 @@
+
+FROM python:3.9.25
+
+# 系统运行时依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    vim \
+    curl \
+    telnet \
+    tcpdump  && \
+    && rm -rf /var/lib/apt/lists/* \
+    && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
+    && locale-gen zh_CN.UTF-8 \
+    && update-locale LANG=zh_CN.UTF-8 \
+    && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment
