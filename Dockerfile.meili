@@ -1,0 +1,12 @@
+# 基础镜像：官方meilisearch v1.24.0（兼容GLIBC 2.28，阿里云3可用）
+FROM getmeili/meilisearch:v1.24.0
+
+# 生产环境默认参数
+ENV MEILI_ENV=production
+# 对外端口
+EXPOSE 7700
+# 数据持久化挂载目录
+VOLUME ["/meili_data"]
+
+# 可选：预设默认密钥（生产环境启动时覆盖更安全）
+# ENV MEILI_MASTER_KEY=ChangeMe123456
