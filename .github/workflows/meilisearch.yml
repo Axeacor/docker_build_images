@@ -1,10 +1,10 @@
 name: Build-Meilisearch-Docker
 
 on:
-  workflow_dispatch: # 仅手动触发，和你原脚本保持一致
+  workflow_dispatch:
 
 permissions:
-  contents: write # 允许创建Release、上传资产文件
+  contents: write
 
 jobs:
   build_and_release:
@@ -12,36 +12,38 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Debug - 打印工作目录文件
+        run: |
+          pwd
+          ls -la
+
       - name: Build Meilisearch Docker image & export offline tar.gz
         run: |
-          # 构建镜像（指定稳定兼容版本v1.24.0，适配Alibaba Cloud Linux3 glibc2.28）
           docker buildx build \
             --platform linux/amd64 \
+            --file ./Dockerfile.meili \
             --tag meilisearch:v1.24.0-amd64 \
             --load \
-            .
-          # 导出镜像并压缩，生成离线传输包
+            ./
           docker save meilisearch:v1.24.0-amd64 | gzip > meilisearch-v1.24.0-amd64.tar.gz
 
       - name: Create GitHub Release & Upload offline image
         uses: softprops/action-gh-release@v2
         with:
-          # tag带运行编号，每次构建生成独立版本
           tag_name: meilisearch-v1.24.0-${{ github.run_number }}
           name: "Meilisearch v1.24.0-amd64 #${{ github.run_number }}"
           body: |
             Meilisearch 离线Docker镜像 amd64，兼容 Alibaba Cloud Linux 3 (GLIBC 2.28)
             ### 内网无外网服务器部署命令
             ```bash
-            # 1. 解压镜像包
             gzip -d meilisearch-v1.24.0-amd64.tar.gz
-            # 2. 加载docker镜像
             docker load -i meilisearch-v1.24.0-amd64.tar
-            # 3. 后台启动持久化服务
             mkdir -p /data/meili_data
             docker run -d \
               --name meilisearch \
