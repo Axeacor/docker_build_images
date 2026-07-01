@@ -33,11 +33,22 @@ jobs:
             ./
           docker save meilisearch:v1.24.0-amd64 | gzip > meilisearch-v1.24.0-amd64.tar.gz
 
+      # 新增：强制校验镜像包，不存在直接报错终止
+      - name: Verify image archive exists
+        run: |
+          ls -lh meilisearch-v1.24.0-amd64.tar.gz
+          if [ ! -f "meilisearch-v1.24.0-amd64.tar.gz" ]; then
+            echo "ERROR: 镜像压缩包未生成！"
+            exit 1
+          fi
+
       - name: Create GitHub Release & Upload offline image
         uses: softprops/action-gh-release@v2
         with:
           tag_name: meilisearch-v1.24.0-${{ github.run_number }}
           name: "Meilisearch v1.24.0-amd64 #${{ github.run_number }}"
+          # 关键修改：去掉|多行语法，单行精准写死文件
+          files: meilisearch-v1.24.0-amd64.tar.gz
           body: |
             Meilisearch 离线Docker镜像 amd64，兼容 Alibaba Cloud Linux 3 (GLIBC 2.28)
             ### 内网无外网服务器部署命令
