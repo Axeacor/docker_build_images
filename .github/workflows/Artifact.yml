@@ -13,7 +13,7 @@ on:
           - DockerfileBase3.9
           - Dockerfile-centos-node
           - DockerfileBase.jetson
-          - Dockerfile_sandbox_py3.9
+          - Dokcerflie_sandbox_py3.9
       image_tag:
         description: '镜像标签 (如: py311-2026.Q2)'
         required: true
