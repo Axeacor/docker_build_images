@@ -1,0 +1,154 @@
+name: Universal-Docker-Matrix
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_image:
+        description: '基础 Linux 镜像'
+        required: true
+        type: choice
+        default: ubuntu:22.04
+        options:
+          - ubuntu:22.04
+          - ubuntu:24.04
+          - debian:12
+          - debian:bookworm-slim
+          - alpine:3.20
+          - rockylinux:9
+          - almalinux:9
+          - centos:7
+      runtime_image:
+        description: '运行时镜像或服务镜像'
+        required: true
+        type: choice
+        default: python:3.11-slim
+        options:
+          - python:3.11-slim
+          - python:3.12-slim
+          - python:3.10-slim
+          - node:20-bookworm-slim
+          - node:22-bookworm-slim
+          - node:18-bookworm-slim
+          - docker.elastic.co/elasticsearch/elasticsearch:8.14.3
+          - getmeili/meilisearch:v1.11
+      image_name:
+        description: '输出镜像名称'
+        required: true
+        default: universal-runtime
+      image_tag:
+        description: '输出镜像标签'
+        required: true
+        default: latest
+      platforms:
+        description: '目标平台, 多个用英文逗号分隔'
+        required: true
+        default: linux/amd64,linux/arm64
+      install_packages:
+        description: '基础镜像额外安装的软件包, 用空格分隔'
+        required: false
+        default: ''
+      python_packages:
+        description: 'Python 额外安装的 pip 包, 用空格分隔'
+        required: false
+        default: ''
+      node_packages:
+        description: 'Node 额外安装的 npm 包, 用空格分隔'
+        required: false
+        default: ''
+      release_tag:
+        description: 'Release 标签名'
+        required: true
+        default: universal-runtime-latest
+
+permissions:
+  contents: write
+
+jobs:
+  build_and_release:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
+        run: |
+          IMAGE_NAME="${{ github.event.inputs.image_name }}"
+          TAG="${{ github.event.inputs.image_tag }}"
+          PLATFORMS="${{ github.event.inputs.platforms }}"
+
+          IFS=',' read -r -a platform_array <<< "$PLATFORMS"
+          for platform in "${platform_array[@]}"; do
+            arch="${platform##*/}"
+            echo "========== Building for ${platform} =========="
+            docker buildx build \
+              --platform "${platform}" \
+              --file docker/Dockerfile.dynamic \
+              --build-arg BASE_IMAGE="${{ github.event.inputs.base_image }}" \
+              --build-arg RUNTIME_IMAGE="${{ github.event.inputs.runtime_image }}" \
+              --build-arg INSTALL_PACKAGES="${{ github.event.inputs.install_packages }}" \
+              --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
+              --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
+              --tag "${IMAGE_NAME}:${TAG}-${arch}" \
+              --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+              .
+            gzip -c "${IMAGE_NAME}-${TAG}-${arch}.tar" > "${IMAGE_NAME}-${TAG}-${arch}.tar.gz"
+            rm -f "${IMAGE_NAME}-${TAG}-${arch}.tar"
+          done
+
+      - name: List generated files
+        run: ls -lh *.tar.gz
+
+      - name: Generate Release Body
+        id: release_body
+        run: |
+          {
+            echo "body<<EOF"
+            echo "## Universal Docker Image Release"
+            echo ""
+            echo "- Base image: \`${{ github.event.inputs.base_image }}\`"
+            echo "- Runtime image: \`${{ github.event.inputs.runtime_image }}\`"
+            echo "- Image name: \`${{ github.event.inputs.image_name }}\`"
+            echo "- Image tag: \`${{ github.event.inputs.image_tag }}\`"
+            echo "- Platforms: \`${{ github.event.inputs.platforms }}\`"
+            echo "- Extra OS packages: \`${{ github.event.inputs.install_packages }}\`"
+            echo "- Extra Python packages: \`${{ github.event.inputs.python_packages }}\`"
+            echo "- Extra Node packages: \`${{ github.event.inputs.node_packages }}\`"
+            echo ""
+            echo "### 示例组合"
+            echo "- \`ubuntu:22.04 + python:3.11-slim\`"
+            echo "- \`debian:12 + node:20-bookworm-slim\`"
+            echo "- \`rockylinux:9 + getmeili/meilisearch:v1.11\`"
+            echo "- \`ubuntu:24.04 + docker.elastic.co/elasticsearch/elasticsearch:8.14.3\`"
+            echo ""
+            echo "### 使用方式"
+            echo "\`\`\`bash"
+            echo "gzip -d ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar.gz"
+            echo "docker load -i ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar"
+            echo "\`\`\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_tag }}
+          body: ${{ steps.release_body.outputs.body }}
+          files: |
+            *.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Docker Image Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images-${{ github.event.inputs.image_tag }}
+          path: |
+            *.tar.gz
+          retention-days: 7
