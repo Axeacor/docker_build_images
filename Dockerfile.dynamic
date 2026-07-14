@@ -1,3 +1,4 @@
+ARG BUILD_MODE=combo
 ARG BASE_IMAGE=ubuntu:22.04
 ARG RUNTIME_IMAGE=python:3.11-slim
 
@@ -8,6 +9,10 @@ ARG INSTALL_PACKAGES=""
 SHELL ["/bin/sh", "-c"]
 
 RUN set -eux; \
+    if [ "${BUILD_MODE}" = "single" ]; then \
+      echo "single mode: skip base package install"; \
+      exit 0; \
+    fi; \
     if command -v apt-get >/dev/null 2>&1; then \
       apt-get update; \
       apt-get install -y --no-install-recommends ca-certificates curl bash; \
@@ -39,6 +44,7 @@ RUN set -eux; \
 
 FROM ${RUNTIME_IMAGE} AS runtime
 
+ARG BUILD_MODE=combo
 ARG PYTHON_PACKAGES=""
 ARG NODE_PACKAGES=""
 
@@ -50,9 +56,14 @@ RUN set -eux; \
     if command -v python >/dev/null 2>&1; then python --version; fi; \
     if command -v python3 >/dev/null 2>&1; then python3 --version; fi; \
     if command -v node >/dev/null 2>&1; then node --version; fi; \
-    if command -v npm >/dev/null 2>&1 && [ -n "${NODE_PACKAGES}" ]; then npm install -g ${NODE_PACKAGES}; fi; \
-    if command -v pip >/dev/null 2>&1 && [ -n "${PYTHON_PACKAGES}" ]; then pip install --no-cache-dir ${PYTHON_PACKAGES}; fi; \
-    if command -v pip3 >/dev/null 2>&1 && [ -n "${PYTHON_PACKAGES}" ]; then pip3 install --no-cache-dir ${PYTHON_PACKAGES}; fi
+    if [ -n "${NODE_PACKAGES}" ] && command -v npm >/dev/null 2>&1; then \
+      npm install -g ${NODE_PACKAGES}; \
+    fi; \
+    if [ -n "${PYTHON_PACKAGES}" ] && command -v pip >/dev/null 2>&1; then \
+      pip install --no-cache-dir ${PYTHON_PACKAGES}; \
+    elif [ -n "${PYTHON_PACKAGES}" ] && command -v pip3 >/dev/null 2>&1; then \
+      pip3 install --no-cache-dir ${PYTHON_PACKAGES}; \
+    fi
 
 WORKDIR /workspace
 
