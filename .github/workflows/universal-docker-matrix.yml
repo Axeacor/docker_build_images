@@ -1,74 +1,170 @@
-name: Universal-Docker-Matrix
+name: Universal-Docker-Build
 
 on:
   workflow_dispatch:
     inputs:
+      build_mode:
+        description: '构建模式: single=单镜像构建, combo=组合构建'
+        required: true
+        type: choice
+        default: single
+        options:
+          - single
+          - combo
+
+      single_image:
+        description: '单镜像模式: 直接填写完整镜像名，例如 python:3.11-slim / node:20-bookworm-slim / getmeili/meilisearch:v1.11'
+        required: false
+        default: ''
+
       base_image:
-        description: '基础 Linux 镜像'
-        required: true
-        type: choice
-        default: ubuntu:22.04
-        options:
-          - ubuntu:22.04
-          - ubuntu:24.04
-          - debian:12
-          - debian:bookworm-slim
-          - alpine:3.20
-          - rockylinux:9
-          - almalinux:9
-          - centos:7
+        description: '组合模式: 基础 Linux 镜像'
+        required: false
+        default: 'ubuntu:22.04'
+
       runtime_image:
-        description: '运行时镜像或服务镜像'
-        required: true
-        type: choice
-        default: python:3.11-slim
-        options:
-          - python:3.11-slim
-          - python:3.12-slim
-          - python:3.10-slim
-          - node:20-bookworm-slim
-          - node:22-bookworm-slim
-          - node:18-bookworm-slim
-          - docker.elastic.co/elasticsearch/elasticsearch:8.14.3
-          - getmeili/meilisearch:v1.11
+        description: '组合模式: 运行时/服务镜像，例如 python:3.11-slim / node:20-bookworm-slim / getmeili/meilisearch:v1.11'
+        required: false
+        default: 'python:3.11-slim'
+
       image_name:
         description: '输出镜像名称'
         required: true
-        default: universal-runtime
+        default: 'universal-runtime'
+
       image_tag:
         description: '输出镜像标签'
         required: true
-        default: latest
+        default: 'latest'
+
       platforms:
-        description: '目标平台, 多个用英文逗号分隔'
+        description: '目标平台, 多个用英文逗号分隔，例如 linux/amd64,linux/arm64'
         required: true
-        default: linux/amd64,linux/arm64
+        default: 'linux/amd64,linux/arm64'
+
       install_packages:
-        description: '基础镜像额外安装的软件包, 用空格分隔'
+        description: '额外系统包(空格分隔)，如 curl git vim'
         required: false
         default: ''
+
       python_packages:
-        description: 'Python 额外安装的 pip 包, 用空格分隔'
+        description: '额外 pip 包(空格分隔)，如 requests fastapi'
         required: false
         default: ''
+
       node_packages:
-        description: 'Node 额外安装的 npm 包, 用空格分隔'
+        description: '额外 npm 全局包(空格分隔)，如 pnpm yarn'
         required: false
         default: ''
+
       release_tag:
         description: 'Release 标签名'
         required: true
-        default: universal-runtime-latest
+        default: 'universal-runtime-latest'
 
 permissions:
   contents: write
 
 jobs:
-  build_and_release:
+  validate_and_build:
     runs-on: ubuntu-22.04
+    env:
+      ALLOWED_BASE_IMAGES: "ubuntu:22.04 ubuntu:24.04 debian:12 debian:bookworm-slim alpine:3.20 rockylinux:9 almalinux:9 centos:7"
+      ALLOWED_RUNTIME_IMAGES: "python:3.10-slim python:3.11-slim python:3.12-slim node:18-bookworm-slim node:20-bookworm-slim node:22-bookworm-slim getmeili/meilisearch:v1.11 docker.elastic.co/elasticsearch/elasticsearch:8.14.3"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Validate inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_MODE="${{ github.event.inputs.build_mode }}"
+          SINGLE_IMAGE="${{ github.event.inputs.single_image }}"
+          BASE_IMAGE="${{ github.event.inputs.base_image }}"
+          RUNTIME_IMAGE="${{ github.event.inputs.runtime_image }}"
+
+          echo "Build mode: ${BUILD_MODE}"
+
+          print_allowed() {
+            echo "Allowed base images:"
+            for item in $ALLOWED_BASE_IMAGES; do
+              echo "  - $item"
+            done
+            echo "Allowed runtime/single images:"
+            for item in $ALLOWED_RUNTIME_IMAGES; do
+              echo "  - $item"
+            done
+          }
+
+          is_in_list() {
+            local target="$1"
+            shift
+            for item in "$@"; do
+              if [ "$item" = "$target" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          read -r -a base_list <<< "$ALLOWED_BASE_IMAGES"
+          read -r -a runtime_list <<< "$ALLOWED_RUNTIME_IMAGES"
+
+          if [ "$BUILD_MODE" = "single" ]; then
+            if [ -z "$SINGLE_IMAGE" ]; then
+              echo "::error::single 模式下必须填写 single_image"
+              print_allowed
+              exit 1
+            fi
+
+            if ! is_in_list "$SINGLE_IMAGE" "${runtime_list[@]}" && ! is_in_list "$SINGLE_IMAGE" "${base_list[@]}"; then
+              echo "::error::single_image 不在允许列表中: $SINGLE_IMAGE"
+              echo "::error::请参考下面可用镜像并重新填写"
+              print_allowed
+              exit 1
+            fi
+
+            echo "FINAL_BASE_IMAGE=scratch" >> "$GITHUB_ENV"
+            echo "FINAL_RUNTIME_IMAGE=$SINGLE_IMAGE" >> "$GITHUB_ENV"
+            echo "FINAL_BUILD_MODE=single" >> "$GITHUB_ENV"
+
+          elif [ "$BUILD_MODE" = "combo" ]; then
+            if [ -z "$BASE_IMAGE" ] || [ -z "$RUNTIME_IMAGE" ]; then
+              echo "::error::combo 模式下必须填写 base_image 和 runtime_image"
+              print_allowed
+              exit 1
+            fi
+
+            if ! is_in_list "$BASE_IMAGE" "${base_list[@]}"; then
+              echo "::error::base_image 不在允许列表中: $BASE_IMAGE"
+              echo "::error::请参考下面可用基础镜像"
+              print_allowed
+              exit 1
+            fi
+
+            if ! is_in_list "$RUNTIME_IMAGE" "${runtime_list[@]}"; then
+              echo "::error::runtime_image 不在允许列表中: $RUNTIME_IMAGE"
+              echo "::error::请参考下面可用运行时镜像"
+              print_allowed
+              exit 1
+            fi
+
+            echo "FINAL_BASE_IMAGE=$BASE_IMAGE" >> "$GITHUB_ENV"
+            echo "FINAL_RUNTIME_IMAGE=$RUNTIME_IMAGE" >> "$GITHUB_ENV"
+            echo "FINAL_BUILD_MODE=combo" >> "$GITHUB_ENV"
+          else
+            echo "::error::未知 build_mode: $BUILD_MODE"
+            echo "::error::仅支持: single, combo"
+            exit 1
+          fi
+
+      - name: Show resolved config
+        run: |
+          echo "FINAL_BUILD_MODE=$FINAL_BUILD_MODE"
+          echo "FINAL_BASE_IMAGE=$FINAL_BASE_IMAGE"
+          echo "FINAL_RUNTIME_IMAGE=$FINAL_RUNTIME_IMAGE"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -77,7 +173,10 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build Docker images
+        shell: bash
         run: |
+          set -euo pipefail
+
           IMAGE_NAME="${{ github.event.inputs.image_name }}"
           TAG="${{ github.event.inputs.image_tag }}"
           PLATFORMS="${{ github.event.inputs.platforms }}"
@@ -88,15 +187,17 @@ jobs:
             echo "========== Building for ${platform} =========="
             docker buildx build \
               --platform "${platform}" \
-              --file docker/Dockerfile.dynamic \
-              --build-arg BASE_IMAGE="${{ github.event.inputs.base_image }}" \
-              --build-arg RUNTIME_IMAGE="${{ github.event.inputs.runtime_image }}" \
+              --file Dockerfile.dynamic \
+              --build-arg BUILD_MODE="${FINAL_BUILD_MODE}" \
+              --build-arg BASE_IMAGE="${FINAL_BASE_IMAGE}" \
+              --build-arg RUNTIME_IMAGE="${FINAL_RUNTIME_IMAGE}" \
               --build-arg INSTALL_PACKAGES="${{ github.event.inputs.install_packages }}" \
               --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
               --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
               --tag "${IMAGE_NAME}:${TAG}-${arch}" \
               --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
               .
+
             gzip -c "${IMAGE_NAME}-${TAG}-${arch}.tar" > "${IMAGE_NAME}-${TAG}-${arch}.tar.gz"
             rm -f "${IMAGE_NAME}-${TAG}-${arch}.tar"
           done
@@ -106,13 +207,15 @@ jobs:
 
       - name: Generate Release Body
         id: release_body
+        shell: bash
         run: |
           {
             echo "body<<EOF"
             echo "## Universal Docker Image Release"
             echo ""
-            echo "- Base image: \`${{ github.event.inputs.base_image }}\`"
-            echo "- Runtime image: \`${{ github.event.inputs.runtime_image }}\`"
+            echo "- Build mode: \`${FINAL_BUILD_MODE}\`"
+            echo "- Base image: \`${FINAL_BASE_IMAGE}\`"
+            echo "- Runtime image: \`${FINAL_RUNTIME_IMAGE}\`"
             echo "- Image name: \`${{ github.event.inputs.image_name }}\`"
             echo "- Image tag: \`${{ github.event.inputs.image_tag }}\`"
             echo "- Platforms: \`${{ github.event.inputs.platforms }}\`"
@@ -120,13 +223,7 @@ jobs:
             echo "- Extra Python packages: \`${{ github.event.inputs.python_packages }}\`"
             echo "- Extra Node packages: \`${{ github.event.inputs.node_packages }}\`"
             echo ""
-            echo "### 示例组合"
-            echo "- \`ubuntu:22.04 + python:3.11-slim\`"
-            echo "- \`debian:12 + node:20-bookworm-slim\`"
-            echo "- \`rockylinux:9 + getmeili/meilisearch:v1.11\`"
-            echo "- \`ubuntu:24.04 + docker.elastic.co/elasticsearch/elasticsearch:8.14.3\`"
-            echo ""
-            echo "### 使用方式"
+            echo "### 导入方式"
             echo "\`\`\`bash"
             echo "gzip -d ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar.gz"
             echo "docker load -i ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar"
