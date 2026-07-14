@@ -13,7 +13,7 @@ on:
           - combo
 
       single_image:
-        description: '单镜像模式: 直接填写完整镜像名，例如 python:3.11-slim / node:20-bookworm-slim / getmeili/meilisearch:v1.11'
+        description: '单镜像模式: 直接填写完整镜像名'
         required: false
         default: ''
 
@@ -23,7 +23,7 @@ on:
         default: 'ubuntu:22.04'
 
       runtime_image:
-        description: '组合模式: 运行时/服务镜像，例如 python:3.11-slim / node:20-bookworm-slim / getmeili/meilisearch:v1.11'
+        description: '组合模式: 运行时/服务镜像'
         required: false
         default: 'python:3.11-slim'
 
@@ -38,22 +38,22 @@ on:
         default: 'latest'
 
       platforms:
-        description: '目标平台, 多个用英文逗号分隔，例如 linux/amd64,linux/arm64'
+        description: '目标平台, 多个用英文逗号分隔'
         required: true
         default: 'linux/amd64,linux/arm64'
 
       install_packages:
-        description: '额外系统包(空格分隔)，如 curl git vim'
+        description: '额外系统包(空格分隔)'
         required: false
         default: ''
 
       python_packages:
-        description: '额外 pip 包(空格分隔)，如 requests fastapi'
+        description: '额外 pip 包(空格分隔)'
         required: false
         default: ''
 
       node_packages:
-        description: '额外 npm 全局包(空格分隔)，如 pnpm yarn'
+        description: '额外 npm 全局包(空格分隔)'
         required: false
         default: ''
 
@@ -84,8 +84,6 @@ jobs:
           SINGLE_IMAGE="${{ github.event.inputs.single_image }}"
           BASE_IMAGE="${{ github.event.inputs.base_image }}"
           RUNTIME_IMAGE="${{ github.event.inputs.runtime_image }}"
-
-          echo "Build mode: ${BUILD_MODE}"
 
           print_allowed() {
             echo "Allowed base images:"
@@ -121,13 +119,12 @@ jobs:
 
             if ! is_in_list "$SINGLE_IMAGE" "${runtime_list[@]}" && ! is_in_list "$SINGLE_IMAGE" "${base_list[@]}"; then
               echo "::error::single_image 不在允许列表中: $SINGLE_IMAGE"
-              echo "::error::请参考下面可用镜像并重新填写"
               print_allowed
               exit 1
             fi
 
-            echo "FINAL_BASE_IMAGE=scratch" >> "$GITHUB_ENV"
-            echo "FINAL_RUNTIME_IMAGE=$SINGLE_IMAGE" >> "$GITHUB_ENV"
+            echo "FINAL_DOCKERFILE=Dockerfile.single" >> "$GITHUB_ENV"
+            echo "FINAL_SOURCE_IMAGE=$SINGLE_IMAGE" >> "$GITHUB_ENV"
             echo "FINAL_BUILD_MODE=single" >> "$GITHUB_ENV"
 
           elif [ "$BUILD_MODE" = "combo" ]; then
@@ -139,32 +136,24 @@ jobs:
 
             if ! is_in_list "$BASE_IMAGE" "${base_list[@]}"; then
               echo "::error::base_image 不在允许列表中: $BASE_IMAGE"
-              echo "::error::请参考下面可用基础镜像"
               print_allowed
               exit 1
             fi
 
             if ! is_in_list "$RUNTIME_IMAGE" "${runtime_list[@]}"; then
               echo "::error::runtime_image 不在允许列表中: $RUNTIME_IMAGE"
-              echo "::error::请参考下面可用运行时镜像"
               print_allowed
               exit 1
             fi
 
+            echo "FINAL_DOCKERFILE=Dockerfile.combo" >> "$GITHUB_ENV"
             echo "FINAL_BASE_IMAGE=$BASE_IMAGE" >> "$GITHUB_ENV"
             echo "FINAL_RUNTIME_IMAGE=$RUNTIME_IMAGE" >> "$GITHUB_ENV"
             echo "FINAL_BUILD_MODE=combo" >> "$GITHUB_ENV"
           else
             echo "::error::未知 build_mode: $BUILD_MODE"
-            echo "::error::仅支持: single, combo"
             exit 1
           fi
-
-      - name: Show resolved config
-        run: |
-          echo "FINAL_BUILD_MODE=$FINAL_BUILD_MODE"
-          echo "FINAL_BASE_IMAGE=$FINAL_BASE_IMAGE"
-          echo "FINAL_RUNTIME_IMAGE=$FINAL_RUNTIME_IMAGE"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -184,59 +173,40 @@ jobs:
           IFS=',' read -r -a platform_array <<< "$PLATFORMS"
           for platform in "${platform_array[@]}"; do
             arch="${platform##*/}"
-            echo "========== Building for ${platform} =========="
-            docker buildx build \
-              --platform "${platform}" \
-              --file Dockerfile.dynamic \
-              --build-arg BUILD_MODE="${FINAL_BUILD_MODE}" \
-              --build-arg BASE_IMAGE="${FINAL_BASE_IMAGE}" \
-              --build-arg RUNTIME_IMAGE="${FINAL_RUNTIME_IMAGE}" \
-              --build-arg INSTALL_PACKAGES="${{ github.event.inputs.install_packages }}" \
-              --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
-              --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
-              --tag "${IMAGE_NAME}:${TAG}-${arch}" \
-              --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
-              .
+
+            if [ "${FINAL_BUILD_MODE}" = "single" ]; then
+              docker buildx build \
+                --platform "${platform}" \
+                --file "${FINAL_DOCKERFILE}" \
+                --build-arg SOURCE_IMAGE="${FINAL_SOURCE_IMAGE}" \
+                --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
+                --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
+                --tag "${IMAGE_NAME}:${TAG}-${arch}" \
+                --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+                .
+            else
+              docker buildx build \
+                --platform "${platform}" \
+                --file "${FINAL_DOCKERFILE}" \
+                --build-arg BASE_IMAGE="${FINAL_BASE_IMAGE}" \
+                --build-arg RUNTIME_IMAGE="${FINAL_RUNTIME_IMAGE}" \
+                --build-arg INSTALL_PACKAGES="${{ github.event.inputs.install_packages }}" \
+                --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
+                --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
+                --tag "${IMAGE_NAME}:${TAG}-${arch}" \
+                --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+                .
+            fi
 
             gzip -c "${IMAGE_NAME}-${TAG}-${arch}.tar" > "${IMAGE_NAME}-${TAG}-${arch}.tar.gz"
             rm -f "${IMAGE_NAME}-${TAG}-${arch}.tar"
           done
-
-      - name: List generated files
-        run: ls -lh *.tar.gz
-
-      - name: Generate Release Body
-        id: release_body
-        shell: bash
-        run: |
-          {
-            echo "body<<EOF"
-            echo "## Universal Docker Image Release"
-            echo ""
-            echo "- Build mode: \`${FINAL_BUILD_MODE}\`"
-            echo "- Base image: \`${FINAL_BASE_IMAGE}\`"
-            echo "- Runtime image: \`${FINAL_RUNTIME_IMAGE}\`"
-            echo "- Image name: \`${{ github.event.inputs.image_name }}\`"
-            echo "- Image tag: \`${{ github.event.inputs.image_tag }}\`"
-            echo "- Platforms: \`${{ github.event.inputs.platforms }}\`"
-            echo "- Extra OS packages: \`${{ github.event.inputs.install_packages }}\`"
-            echo "- Extra Python packages: \`${{ github.event.inputs.python_packages }}\`"
-            echo "- Extra Node packages: \`${{ github.event.inputs.node_packages }}\`"
-            echo ""
-            echo "### 导入方式"
-            echo "\`\`\`bash"
-            echo "gzip -d ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar.gz"
-            echo "docker load -i ${{ github.event.inputs.image_name }}-${{ github.event.inputs.image_tag }}-amd64.tar"
-            echo "\`\`\`"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
           name: ${{ github.event.inputs.release_tag }}
-          body: ${{ steps.release_body.outputs.body }}
           files: |
             *.tar.gz
         env:
