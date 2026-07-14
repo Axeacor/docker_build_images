@@ -4,47 +4,47 @@ ARG RUNTIME_IMAGE=python:3.11-slim
 
 FROM ${BASE_IMAGE} AS base
 
+ARG BUILD_MODE
 ARG INSTALL_PACKAGES=""
 
 SHELL ["/bin/sh", "-c"]
 
 RUN set -eux; \
-    if [ "${BUILD_MODE}" = "single" ]; then \
-      echo "single mode: skip base package install"; \
-      exit 0; \
-    fi; \
-    if command -v apt-get >/dev/null 2>&1; then \
-      apt-get update; \
-      apt-get install -y --no-install-recommends ca-certificates curl bash; \
-      if [ -n "${INSTALL_PACKAGES}" ]; then \
-        apt-get install -y --no-install-recommends ${INSTALL_PACKAGES}; \
+    if [ "${BUILD_MODE}" != "single" ]; then \
+      if command -v apt-get >/dev/null 2>&1; then \
+        apt-get update; \
+        apt-get install -y --no-install-recommends ca-certificates curl bash; \
+        if [ -n "${INSTALL_PACKAGES}" ]; then \
+          apt-get install -y --no-install-recommends ${INSTALL_PACKAGES}; \
+        fi; \
+        rm -rf /var/lib/apt/lists/*; \
+      elif command -v apk >/dev/null 2>&1; then \
+        apk add --no-cache ca-certificates curl bash; \
+        if [ -n "${INSTALL_PACKAGES}" ]; then \
+          apk add --no-cache ${INSTALL_PACKAGES}; \
+        fi; \
+      elif command -v dnf >/dev/null 2>&1; then \
+        dnf install -y ca-certificates curl bash; \
+        if [ -n "${INSTALL_PACKAGES}" ]; then \
+          dnf install -y ${INSTALL_PACKAGES}; \
+        fi; \
+        dnf clean all; \
+      elif command -v yum >/dev/null 2>&1; then \
+        yum install -y ca-certificates curl bash; \
+        if [ -n "${INSTALL_PACKAGES}" ]; then \
+          yum install -y ${INSTALL_PACKAGES}; \
+        fi; \
+        yum clean all; \
+      else \
+        echo "Unsupported base image package manager"; \
+        exit 1; \
       fi; \
-      rm -rf /var/lib/apt/lists/*; \
-    elif command -v apk >/dev/null 2>&1; then \
-      apk add --no-cache ca-certificates curl bash; \
-      if [ -n "${INSTALL_PACKAGES}" ]; then \
-        apk add --no-cache ${INSTALL_PACKAGES}; \
-      fi; \
-    elif command -v dnf >/dev/null 2>&1; then \
-      dnf install -y ca-certificates curl bash; \
-      if [ -n "${INSTALL_PACKAGES}" ]; then \
-        dnf install -y ${INSTALL_PACKAGES}; \
-      fi; \
-      dnf clean all; \
-    elif command -v yum >/dev/null 2>&1; then \
-      yum install -y ca-certificates curl bash; \
-      if [ -n "${INSTALL_PACKAGES}" ]; then \
-        yum install -y ${INSTALL_PACKAGES}; \
-      fi; \
-      yum clean all; \
     else \
-      echo "Unsupported base image package manager"; \
-      exit 1; \
+      echo "single mode: skip base layer package installation"; \
     fi
 
 FROM ${RUNTIME_IMAGE} AS runtime
 
-ARG BUILD_MODE=combo
 ARG PYTHON_PACKAGES=""
 ARG NODE_PACKAGES=""
 
