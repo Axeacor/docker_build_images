@@ -10,33 +10,32 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    wget \
-    curl \
     ca-certificates \
-    libssl-dev \
+    curl \
+    wget \
+    make \
+    xz-utils \
     zlib1g-dev \
+    libssl-dev \
+    libffi-dev \
     libbz2-dev \
     libreadline-dev \
     libsqlite3-dev \
-    libncursesw5-dev \
-    xz-utils \
-    tk-dev \
-    libxml2-dev \
-    libxmlsec1-dev \
-    libffi-dev \
     liblzma-dev \
+    libncurses5-dev \
     libgdbm-dev \
     libnss3-dev \
     uuid-dev \
-    make \
+    tk-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /tmp
 
-RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz \
-    && tar -xzf Python-${PYTHON_VERSION}.tgz \
+COPY Python-3.10.14.tgz /tmp/
+
+RUN tar -xzf Python-${PYTHON_VERSION}.tgz \
     && cd Python-${PYTHON_VERSION} \
-    && ./configure --prefix=/opt/python3.10 --enable-optimizations --with-ensurepip=install \
+    && ./configure --prefix=/opt/python3.10 --with-ensurepip=install \
     && make -j"$(nproc)" \
     && make install \
     && /opt/python3.10/bin/python3.10 -m pip install --upgrade pip \
@@ -51,8 +50,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
-    curl \
     bash \
+    curl \
     gcc \
     g++ \
     make \
@@ -75,9 +74,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libbz2-1.0 \
     libreadline7 \
     libsqlite3-0 \
-    libncursesw5 \
-    libffi6 \
     liblzma5 \
+    libncurses5 \
+    libffi6 \
     libgdbm5 \
     libnss3 \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
@@ -91,8 +90,8 @@ COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
 
 RUN ln -sf /opt/python3.10/bin/python3.10 /usr/bin/python3 \
     && ln -sf /opt/python3.10/bin/python3.10 /usr/bin/python \
-    && ln -sf /opt/python3.10/bin/pip3 /usr/bin/pip3 \
-    && ln -sf /opt/python3.10/bin/pip3 /usr/bin/pip
+    && ln -sf /opt/python3.10/bin/pip3.10 /usr/bin/pip3 \
+    && ln -sf /opt/python3.10/bin/pip3.10 /usr/bin/pip
 
 ENV PATH=/opt/python3.10/bin:$PATH \
     LANG=zh_CN.UTF-8 \
