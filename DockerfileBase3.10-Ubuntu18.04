@@ -1,37 +1,55 @@
 # ====================== 构建参数 ======================
 ARG BUILDPLATFORM
 ARG TARGETPLATFORM
+ARG PYTHON_VERSION=3.10.14
 
-# ====================== Builder 阶段（用于配置 pip） ======================
+# ====================== Builder 阶段（编译 Python） ======================
 FROM --platform=${BUILDPLATFORM} ubuntu:18.04 AS builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
+    build-essential \
+    wget \
+    curl \
     ca-certificates \
-    curl \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3.10-dev \
-    python3.10-distutils \
-    curl \
-    && curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
-    && python3.10 /tmp/get-pip.py \
-    && python3.10 -m pip install --upgrade pip \
-    && python3.10 -m pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple \
-    && python3.10 -m pip config set global.trusted-host repo.pe2.cc \
-    && rm -rf /var/lib/apt/lists/* /tmp/get-pip.py
+    libssl-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    libreadline-dev \
+    libsqlite3-dev \
+    libncursesw5-dev \
+    xz-utils \
+    tk-dev \
+    libxml2-dev \
+    libxmlsec1-dev \
+    libffi-dev \
+    liblzma-dev \
+    libgdbm-dev \
+    libnss3-dev \
+    uuid-dev \
+    make \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+RUN wget https://www.python.org/ftp/python/${PYTHON_VERSION}/Python-${PYTHON_VERSION}.tgz \
+    && tar -xzf Python-${PYTHON_VERSION}.tgz \
+    && cd Python-${PYTHON_VERSION} \
+    && ./configure --prefix=/opt/python3.10 --enable-optimizations --with-ensurepip=install \
+    && make -j"$(nproc)" \
+    && make install \
+    && /opt/python3.10/bin/python3.10 -m pip install --upgrade pip \
+    && /opt/python3.10/bin/python3.10 -m pip config set global.index-url http://repo.pe2.cc/repository/pypi/simple \
+    && /opt/python3.10/bin/python3.10 -m pip config set global.trusted-host repo.pe2.cc \
+    && rm -rf /tmp/Python-${PYTHON_VERSION} /tmp/Python-${PYTHON_VERSION}.tgz
 
 # ====================== 最终基础镜像 ======================
 FROM --platform=${TARGETPLATFORM} ubuntu:18.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 系统运行时依赖
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
     ca-certificates \
     curl \
     bash \
@@ -52,31 +70,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     libjpeg-turbo8 \
     libpng16-16 \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3.10-dev \
-    python3.10-distutils \
-    && curl -sS https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
-    && python3.10 /tmp/get-pip.py \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
-    && ln -sf /usr/bin/python3.10 /usr/bin/python \
-    && ln -sf /usr/local/bin/pip /usr/bin/pip3 \
+    libssl1.1 \
+    zlib1g \
+    libbz2-1.0 \
+    libreadline7 \
+    libsqlite3-0 \
+    libncursesw5 \
+    libffi6 \
+    liblzma5 \
+    libgdbm5 \
+    libnss3 \
     && sed -i 's/# zh_CN.UTF-8 UTF-8/zh_CN.UTF-8 UTF-8/g' /etc/locale.gen \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && echo "LC_ALL=zh_CN.UTF-8" >> /etc/environment \
-    && rm -rf /var/lib/apt/lists/* /tmp/get-pip.py
+    && rm -rf /var/lib/apt/lists/*
 
-# 环境变量
-ENV LANG=zh_CN.UTF-8 \
+COPY --from=builder /opt/python3.10 /opt/python3.10
+COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
+
+RUN ln -sf /opt/python3.10/bin/python3.10 /usr/bin/python3 \
+    && ln -sf /opt/python3.10/bin/python3.10 /usr/bin/python \
+    && ln -sf /opt/python3.10/bin/pip3 /usr/bin/pip3 \
+    && ln -sf /opt/python3.10/bin/pip3 /usr/bin/pip
+
+ENV PATH=/opt/python3.10/bin:$PATH \
+    LANG=zh_CN.UTF-8 \
     LC_ALL=zh_CN.UTF-8 \
     TZ=UTC
 
-# 复制 pip 配置
-COPY --from=builder /root/.config/pip/pip.conf /root/.config/pip/pip.conf
-
-# 设置工作目录
 WORKDIR /app
 
 CMD ["bash"]
