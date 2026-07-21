@@ -13,6 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check Python source tarball
+        run: |
+          test -f Python-3.10.14.tgz || (echo "Python-3.10.14.tgz not found in repository root" && exit 1)
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -32,7 +36,7 @@ jobs:
           tag_name: ubuntu1804-py310-${{ github.run_number }}
           name: "ubuntu1804-py310 #${{ github.run_number }}"
           body: |
-            Ubuntu 18.04 + Python 3.10 基础镜像
+            Ubuntu 18.04 + Python 3.10 构建镜像
 
             ```bash
             gzip -d ubuntu1804-py310-amd64.tar.gz
