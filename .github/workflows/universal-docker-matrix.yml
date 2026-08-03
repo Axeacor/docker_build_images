@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_mode:
-        description: '构建模式: single=单镜像构建, combo=组合构建'
+        description: '构建模式'
         required: true
         type: choice
         default: single
@@ -12,23 +12,98 @@ on:
           - single
           - combo
 
+      single_image_preset:
+        description: 'single: 常用镜像；选 custom 时填写 single_image'
+        required: true
+        type: choice
+        default: 'python:3.12-slim'
+        options:
+          - 'python:3.12-slim'
+          - 'python:3.12-alpine'
+          - 'python:3.13-slim'
+          - 'python:3.13-alpine'
+          - 'node:22-alpine'
+          - 'node:22-bookworm-slim'
+          - 'node:24-alpine'
+          - 'node:24-bookworm-slim'
+          - 'ubuntu:24.04'
+          - 'alpine:3.20'
+          - custom
+
       single_image:
-        description: '单镜像模式: 直接填写完整镜像名'
+        description: 'single: 自定义完整镜像名；填写后覆盖 preset'
         required: false
         default: ''
 
+      base_image_preset:
+        description: 'combo: 基础 Linux 镜像；选 custom 时填写 base_image'
+        required: true
+        type: choice
+        default: 'ubuntu:24.04'
+        options:
+          - 'ubuntu:22.04'
+          - 'ubuntu:24.04'
+          - 'debian:12'
+          - 'debian:bookworm-slim'
+          - 'alpine:3.20'
+          - 'rockylinux:9'
+          - 'almalinux:9'
+          - custom
+
       base_image:
-        description: '组合模式: 基础 Linux 镜像'
+        description: 'combo: 自定义基础镜像；填写后覆盖 base_image_preset'
         required: false
-        default: 'ubuntu:22.04'
+        default: ''
+
+      runtime_image_preset:
+        description: 'combo: 运行时/服务镜像；选 custom 时填写 runtime_image'
+        required: true
+        type: choice
+        default: 'python:3.12-slim'
+        options:
+          - 'python:3.12-slim'
+          - 'python:3.13-slim'
+          - 'node:22-bookworm-slim'
+          - 'node:22-alpine'
+          - 'getmeili/meilisearch:v1.11'
+          - 'docker.elastic.co/elasticsearch/elasticsearch:8.14.3'
+          - custom
 
       runtime_image:
-        description: '组合模式: 运行时/服务镜像'
+        description: 'combo: 自定义运行时镜像；填写后覆盖 runtime_image_preset'
         required: false
-        default: 'python:3.11-slim'
+        default: ''
+
+      package_profile:
+        description: '系统依赖预设；Python/Node 原生扩展编译失败时选对应 build'
+        required: true
+        type: choice
+        default: auto
+        options:
+          - auto
+          - none
+          - runtime
+          - python-build
+          - node-build
+          - python-node-build
+
+      install_packages:
+        description: '额外系统包；空格/逗号/换行分隔'
+        required: false
+        default: ''
+
+      python_packages:
+        description: '额外 pip 包；空格/逗号/换行分隔'
+        required: false
+        default: ''
+
+      node_packages:
+        description: '额外 npm 全局包；空格/逗号/换行分隔'
+        required: false
+        default: ''
 
       image_name:
-        description: '输出镜像名称'
+        description: '输出镜像名称，不要带 tag'
         required: true
         default: 'universal-runtime'
 
@@ -38,24 +113,9 @@ on:
         default: 'latest'
 
       platforms:
-        description: '目标平台, 多个用英文逗号分隔'
+        description: '目标平台，多个用英文逗号分隔'
         required: true
         default: 'linux/amd64,linux/arm64'
-
-      install_packages:
-        description: '额外系统包(空格分隔)'
-        required: false
-        default: ''
-
-      python_packages:
-        description: '额外 pip 包(空格分隔)'
-        required: false
-        default: ''
-
-      node_packages:
-        description: '额外 npm 全局包(空格分隔)'
-        required: false
-        default: ''
 
       release_tag:
         description: 'Release 标签名'
@@ -66,94 +126,203 @@ permissions:
   contents: write
 
 jobs:
-  validate_and_build:
+  build_and_release:
     runs-on: ubuntu-22.04
     env:
-      ALLOWED_BASE_IMAGES: "ubuntu:22.04 ubuntu:24.04 debian:12 debian:bookworm-slim alpine:3.20 rockylinux:9 almalinux:9 centos:7"
-      ALLOWED_RUNTIME_IMAGES: "python:3.10-slim python:3.11-slim python:3.12-slim node:18-bookworm-slim node:20-bookworm-slim node:22-bookworm-slim getmeili/meilisearch:v1.11 docker.elastic.co/elasticsearch/elasticsearch:8.14.3"
+      INPUT_BUILD_MODE: ${{ inputs.build_mode }}
+      INPUT_SINGLE_IMAGE_PRESET: ${{ inputs.single_image_preset }}
+      INPUT_SINGLE_IMAGE: ${{ inputs.single_image }}
+      INPUT_BASE_IMAGE_PRESET: ${{ inputs.base_image_preset }}
+      INPUT_BASE_IMAGE: ${{ inputs.base_image }}
+      INPUT_RUNTIME_IMAGE_PRESET: ${{ inputs.runtime_image_preset }}
+      INPUT_RUNTIME_IMAGE: ${{ inputs.runtime_image }}
+      INPUT_PACKAGE_PROFILE: ${{ inputs.package_profile }}
+      INPUT_INSTALL_PACKAGES: ${{ inputs.install_packages }}
+      INPUT_PYTHON_PACKAGES: ${{ inputs.python_packages }}
+      INPUT_NODE_PACKAGES: ${{ inputs.node_packages }}
+      INPUT_IMAGE_NAME: ${{ inputs.image_name }}
+      INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+      INPUT_PLATFORMS: ${{ inputs.platforms }}
+      INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate inputs
+      - name: Validate and prepare inputs
+        id: prepare
         shell: bash
         run: |
           set -euo pipefail
 
-          BUILD_MODE="${{ github.event.inputs.build_mode }}"
-          SINGLE_IMAGE="${{ github.event.inputs.single_image }}"
-          BASE_IMAGE="${{ github.event.inputs.base_image }}"
-          RUNTIME_IMAGE="${{ github.event.inputs.runtime_image }}"
-
-          print_allowed() {
-            echo "Allowed base images:"
-            for item in $ALLOWED_BASE_IMAGES; do
-              echo "  - $item"
-            done
-            echo "Allowed runtime/single images:"
-            for item in $ALLOWED_RUNTIME_IMAGES; do
-              echo "  - $item"
-            done
+          trim() {
+            sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' <<< "$1"
           }
 
-          is_in_list() {
-            local target="$1"
-            shift
-            for item in "$@"; do
-              if [ "$item" = "$target" ]; then
-                return 0
+          normalize_list() {
+            printf '%s' "$1" | tr ',\r\n' '   ' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/[[:space:]][[:space:]]*/ /g'
+          }
+
+          write_env() {
+            local name="$1"
+            local value="$2"
+            {
+              echo "${name}<<EOF"
+              echo "${value}"
+              echo "EOF"
+            } >> "$GITHUB_ENV"
+          }
+
+          reject_newline() {
+            local label="$1"
+            local value="$2"
+            if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+              echo "::error::${label} 不能包含换行"
+              exit 1
+            fi
+          }
+
+          validate_image_ref() {
+            local label="$1"
+            local value="$2"
+            reject_newline "$label" "$value"
+            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]]; then
+              echo "::error::${label} 不是有效的 Docker 镜像引用: ${value}"
+              exit 1
+            fi
+          }
+
+          validate_image_name() {
+            local value="$1"
+            reject_newline "image_name" "$value"
+            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]]; then
+              echo "::error::image_name 不是有效的镜像名: ${value}"
+              exit 1
+            fi
+            local last_segment="${value##*/}"
+            if [[ "$last_segment" == *:* ]]; then
+              echo "::error::image_name 不要带 tag，请把 tag 填到 image_tag"
+              exit 1
+            fi
+          }
+
+          validate_tag() {
+            local label="$1"
+            local value="$2"
+            reject_newline "$label" "$value"
+            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
+              echo "::error::${label} 只能使用 Docker tag 兼容字符: ${value}"
+              exit 1
+            fi
+          }
+
+          validate_release_tag() {
+            local value="$1"
+            reject_newline "release_tag" "$value"
+            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ ]]; then
+              echo "::error::release_tag 不是安全的 Git tag: ${value}"
+              exit 1
+            fi
+          }
+
+          resolve_preset() {
+            local label="$1"
+            local preset="$2"
+            local custom="$3"
+            custom="$(trim "$custom")"
+            if [[ -n "$custom" ]]; then
+              printf '%s' "$custom"
+              return
+            fi
+            if [[ "$preset" == "custom" || -z "$preset" ]]; then
+              echo "::error::${label} 选择 custom 时必须填写自定义值" >&2
+              exit 1
+            fi
+            printf '%s' "$preset"
+          }
+
+          normalize_platforms() {
+            local result=""
+            local platform
+            while IFS= read -r platform; do
+              platform="$(trim "$platform")"
+              [[ -z "$platform" ]] && continue
+              if [[ ! "$platform" =~ ^linux/(amd64|arm64|arm/v7|arm/v6|386|ppc64le|s390x|riscv64)$ ]]; then
+                echo "::error::不支持的平台: ${platform}" >&2
+                exit 1
               fi
-            done
-            return 1
+              if [[ -z "$result" ]]; then
+                result="$platform"
+              else
+                result="${result},${platform}"
+              fi
+            done < <(printf '%s' "$1" | tr ',' '\n')
+
+            if [[ -z "$result" ]]; then
+              echo "::error::platforms 不能为空" >&2
+              exit 1
+            fi
+            printf '%s' "$result"
           }
 
-          read -r -a base_list <<< "$ALLOWED_BASE_IMAGES"
-          read -r -a runtime_list <<< "$ALLOWED_RUNTIME_IMAGES"
+          BUILD_MODE="$(trim "$INPUT_BUILD_MODE")"
+          IMAGE_NAME="$(trim "$INPUT_IMAGE_NAME")"
+          IMAGE_TAG="$(trim "$INPUT_IMAGE_TAG")"
+          RELEASE_TAG="$(trim "$INPUT_RELEASE_TAG")"
+          PACKAGE_PROFILE="$(trim "$INPUT_PACKAGE_PROFILE")"
+          INSTALL_PACKAGES="$(normalize_list "$INPUT_INSTALL_PACKAGES")"
+          PYTHON_PACKAGES="$(normalize_list "$INPUT_PYTHON_PACKAGES")"
+          NODE_PACKAGES="$(normalize_list "$INPUT_NODE_PACKAGES")"
+          PLATFORMS="$(normalize_platforms "$INPUT_PLATFORMS")"
 
-          if [ "$BUILD_MODE" = "single" ]; then
-            if [ -z "$SINGLE_IMAGE" ]; then
-              echo "::error::single 模式下必须填写 single_image"
-              print_allowed
+          case "$BUILD_MODE" in
+            single)
+              SOURCE_IMAGE="$(resolve_preset "single_image" "$INPUT_SINGLE_IMAGE_PRESET" "$INPUT_SINGLE_IMAGE")"
+              validate_image_ref "single_image" "$SOURCE_IMAGE"
+              write_env "FINAL_DOCKERFILE" "Dockerfile.single"
+              write_env "FINAL_SOURCE_IMAGE" "$SOURCE_IMAGE"
+              ;;
+            combo)
+              BASE_IMAGE="$(resolve_preset "base_image" "$INPUT_BASE_IMAGE_PRESET" "$INPUT_BASE_IMAGE")"
+              RUNTIME_IMAGE="$(resolve_preset "runtime_image" "$INPUT_RUNTIME_IMAGE_PRESET" "$INPUT_RUNTIME_IMAGE")"
+              validate_image_ref "base_image" "$BASE_IMAGE"
+              validate_image_ref "runtime_image" "$RUNTIME_IMAGE"
+              write_env "FINAL_DOCKERFILE" "Dockerfile.combo"
+              write_env "FINAL_BASE_IMAGE" "$BASE_IMAGE"
+              write_env "FINAL_RUNTIME_IMAGE" "$RUNTIME_IMAGE"
+              ;;
+            *)
+              echo "::error::未知 build_mode: ${BUILD_MODE}"
               exit 1
-            fi
+              ;;
+          esac
 
-            if ! is_in_list "$SINGLE_IMAGE" "${runtime_list[@]}" && ! is_in_list "$SINGLE_IMAGE" "${base_list[@]}"; then
-              echo "::error::single_image 不在允许列表中: $SINGLE_IMAGE"
-              print_allowed
+          case "$PACKAGE_PROFILE" in
+            auto|none|runtime|python-build|node-build|python-node-build) ;;
+            *)
+              echo "::error::未知 package_profile: ${PACKAGE_PROFILE}"
               exit 1
-            fi
+              ;;
+          esac
 
-            echo "FINAL_DOCKERFILE=Dockerfile.single" >> "$GITHUB_ENV"
-            echo "FINAL_SOURCE_IMAGE=$SINGLE_IMAGE" >> "$GITHUB_ENV"
-            echo "FINAL_BUILD_MODE=single" >> "$GITHUB_ENV"
+          validate_image_name "$IMAGE_NAME"
+          validate_tag "image_tag" "$IMAGE_TAG"
+          validate_release_tag "$RELEASE_TAG"
 
-          elif [ "$BUILD_MODE" = "combo" ]; then
-            if [ -z "$BASE_IMAGE" ] || [ -z "$RUNTIME_IMAGE" ]; then
-              echo "::error::combo 模式下必须填写 base_image 和 runtime_image"
-              print_allowed
-              exit 1
-            fi
+          SAFE_FILE_PREFIX="$(printf '%s-%s' "$IMAGE_NAME" "$IMAGE_TAG" | sed -E 's#[^A-Za-z0-9_.-]+#-#g; s#^-+|-+$##g')"
 
-            if ! is_in_list "$BASE_IMAGE" "${base_list[@]}"; then
-              echo "::error::base_image 不在允许列表中: $BASE_IMAGE"
-              print_allowed
-              exit 1
-            fi
+          write_env "FINAL_BUILD_MODE" "$BUILD_MODE"
+          write_env "FINAL_IMAGE_NAME" "$IMAGE_NAME"
+          write_env "FINAL_IMAGE_TAG" "$IMAGE_TAG"
+          write_env "FINAL_RELEASE_TAG" "$RELEASE_TAG"
+          write_env "FINAL_PACKAGE_PROFILE" "$PACKAGE_PROFILE"
+          write_env "FINAL_INSTALL_PACKAGES" "$INSTALL_PACKAGES"
+          write_env "FINAL_PYTHON_PACKAGES" "$PYTHON_PACKAGES"
+          write_env "FINAL_NODE_PACKAGES" "$NODE_PACKAGES"
+          write_env "FINAL_PLATFORMS" "$PLATFORMS"
+          write_env "FINAL_SAFE_FILE_PREFIX" "$SAFE_FILE_PREFIX"
 
-            if ! is_in_list "$RUNTIME_IMAGE" "${runtime_list[@]}"; then
-              echo "::error::runtime_image 不在允许列表中: $RUNTIME_IMAGE"
-              print_allowed
-              exit 1
-            fi
-
-            echo "FINAL_DOCKERFILE=Dockerfile.combo" >> "$GITHUB_ENV"
-            echo "FINAL_BASE_IMAGE=$BASE_IMAGE" >> "$GITHUB_ENV"
-            echo "FINAL_RUNTIME_IMAGE=$RUNTIME_IMAGE" >> "$GITHUB_ENV"
-            echo "FINAL_BUILD_MODE=combo" >> "$GITHUB_ENV"
-          else
-            echo "::error::未知 build_mode: $BUILD_MODE"
-            exit 1
-          fi
+          echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -161,52 +330,97 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker images
+      - name: Build and export Docker images
         shell: bash
         run: |
           set -euo pipefail
 
-          IMAGE_NAME="${{ github.event.inputs.image_name }}"
-          TAG="${{ github.event.inputs.image_tag }}"
-          PLATFORMS="${{ github.event.inputs.platforms }}"
+          while IFS= read -r platform; do
+            [[ -z "$platform" ]] && continue
+            platform_tag="${platform#linux/}"
+            platform_tag="${platform_tag//\//-}"
+            image_ref="${FINAL_IMAGE_NAME}:${FINAL_IMAGE_TAG}-${platform_tag}"
+            archive="${FINAL_SAFE_FILE_PREFIX}-${platform_tag}.tar"
 
-          IFS=',' read -r -a platform_array <<< "$PLATFORMS"
-          for platform in "${platform_array[@]}"; do
-            arch="${platform##*/}"
-
-            if [ "${FINAL_BUILD_MODE}" = "single" ]; then
+            echo "========== Building ${image_ref} for ${platform} =========="
+            if [[ "$FINAL_BUILD_MODE" == "single" ]]; then
               docker buildx build \
-                --platform "${platform}" \
-                --file "${FINAL_DOCKERFILE}" \
-                --build-arg SOURCE_IMAGE="${FINAL_SOURCE_IMAGE}" \
-                --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
-                --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
-                --tag "${IMAGE_NAME}:${TAG}-${arch}" \
-                --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+                --platform "$platform" \
+                --file "$FINAL_DOCKERFILE" \
+                --build-arg "SOURCE_IMAGE=${FINAL_SOURCE_IMAGE}" \
+                --build-arg "PACKAGE_PROFILE=${FINAL_PACKAGE_PROFILE}" \
+                --build-arg "INSTALL_PACKAGES=${FINAL_INSTALL_PACKAGES}" \
+                --build-arg "PYTHON_PACKAGES=${FINAL_PYTHON_PACKAGES}" \
+                --build-arg "NODE_PACKAGES=${FINAL_NODE_PACKAGES}" \
+                --tag "$image_ref" \
+                --output "type=docker,dest=${archive}" \
                 .
             else
               docker buildx build \
-                --platform "${platform}" \
-                --file "${FINAL_DOCKERFILE}" \
-                --build-arg BASE_IMAGE="${FINAL_BASE_IMAGE}" \
-                --build-arg RUNTIME_IMAGE="${FINAL_RUNTIME_IMAGE}" \
-                --build-arg INSTALL_PACKAGES="${{ github.event.inputs.install_packages }}" \
-                --build-arg PYTHON_PACKAGES="${{ github.event.inputs.python_packages }}" \
-                --build-arg NODE_PACKAGES="${{ github.event.inputs.node_packages }}" \
-                --tag "${IMAGE_NAME}:${TAG}-${arch}" \
-                --output "type=docker,dest=${IMAGE_NAME}-${TAG}-${arch}.tar" \
+                --platform "$platform" \
+                --file "$FINAL_DOCKERFILE" \
+                --build-arg "BASE_IMAGE=${FINAL_BASE_IMAGE}" \
+                --build-arg "RUNTIME_IMAGE=${FINAL_RUNTIME_IMAGE}" \
+                --build-arg "PACKAGE_PROFILE=${FINAL_PACKAGE_PROFILE}" \
+                --build-arg "INSTALL_PACKAGES=${FINAL_INSTALL_PACKAGES}" \
+                --build-arg "PYTHON_PACKAGES=${FINAL_PYTHON_PACKAGES}" \
+                --build-arg "NODE_PACKAGES=${FINAL_NODE_PACKAGES}" \
+                --tag "$image_ref" \
+                --output "type=docker,dest=${archive}" \
                 .
             fi
 
-            gzip -c "${IMAGE_NAME}-${TAG}-${arch}.tar" > "${IMAGE_NAME}-${TAG}-${arch}.tar.gz"
-            rm -f "${IMAGE_NAME}-${TAG}-${arch}.tar"
-          done
+            gzip -9c "$archive" > "${archive}.gz"
+            rm -f "$archive"
+          done < <(printf '%s' "$FINAL_PLATFORMS" | tr ',' '\n')
+
+      - name: Verify generated archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(*.tar.gz)
+          if (( ${#files[@]} == 0 )); then
+            echo "::error::未生成任何镜像压缩包"
+            exit 1
+          fi
+          ls -lh "${files[@]}"
+
+      - name: Generate release body
+        id: release_body
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "body<<EOF"
+            echo "## Universal Docker Image"
+            echo ""
+            echo "- Build mode: \`${FINAL_BUILD_MODE}\`"
+            echo "- Dockerfile: \`${FINAL_DOCKERFILE}\`"
+            echo "- Image prefix: \`${FINAL_IMAGE_NAME}:${FINAL_IMAGE_TAG}-<arch>\`"
+            echo "- Platforms: \`${FINAL_PLATFORMS}\`"
+            echo "- Package profile: \`${FINAL_PACKAGE_PROFILE}\`"
+            if [[ "$FINAL_BUILD_MODE" == "single" ]]; then
+              echo "- Source image: \`${FINAL_SOURCE_IMAGE}\`"
+            else
+              echo "- Base image: \`${FINAL_BASE_IMAGE}\`"
+              echo "- Runtime image: \`${FINAL_RUNTIME_IMAGE}\`"
+            fi
+            echo ""
+            echo "### Load"
+            echo "\`\`\`bash"
+            echo "gzip -d <archive>.tar.gz"
+            echo "docker load -i <archive>.tar"
+            echo "\`\`\`"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag }}
-          name: ${{ github.event.inputs.release_tag }}
+          tag_name: ${{ steps.prepare.outputs.release_tag }}
+          name: ${{ steps.prepare.outputs.release_tag }}
+          body: ${{ steps.release_body.outputs.body }}
           files: |
             *.tar.gz
         env:
@@ -215,7 +429,7 @@ jobs:
       - name: Upload Docker Image Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: docker-images-${{ github.event.inputs.image_tag }}
+          name: docker-images-${{ steps.prepare.outputs.image_tag }}
           path: |
             *.tar.gz
           retention-days: 7
