@@ -34,7 +34,7 @@ RUN set -eux; \
       pm="$1"; \
       profile="$2"; \
       case "${pm}:${profile}" in \
-        apt:none|apk:none|dnf:none|microdnf:none|yum:none) echo "" ;; \
+        apt:none|apk:none|dnf:none|microdnf:none|yum:none|none:none) echo "" ;; \
         apt:runtime) echo "ca-certificates curl bash" ;; \
         apk:runtime) echo "ca-certificates curl bash" ;; \
         dnf:runtime|microdnf:runtime|yum:runtime) echo "ca-certificates curl bash" ;; \

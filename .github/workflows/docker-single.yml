@@ -1,81 +1,33 @@
-name: Universal-Docker-Build
+name: Docker Build - Single
 
 on:
   workflow_dispatch:
     inputs:
-      build_mode:
-        description: '构建模式'
-        required: true
-        type: choice
-        default: single
-        options:
-          - single
-          - combo
-
       single_image_preset:
-        description: 'single: 常用镜像；选 custom 时填写 single_image'
+        description: '常用镜像；选 custom 时填写 single_image'
         required: true
         type: choice
-        default: 'python:3.12-slim'
+        default: 'node:22-alpine'
         options:
-          - 'python:3.12-slim'
-          - 'python:3.12-alpine'
-          - 'python:3.13-slim'
-          - 'python:3.13-alpine'
           - 'node:22-alpine'
           - 'node:22-bookworm-slim'
           - 'node:24-alpine'
           - 'node:24-bookworm-slim'
+          - 'python:3.12-slim'
+          - 'python:3.12-alpine'
+          - 'python:3.13-slim'
+          - 'python:3.13-alpine'
           - 'ubuntu:24.04'
           - 'alpine:3.20'
           - custom
 
       single_image:
-        description: 'single: 自定义完整镜像名；填写后覆盖 preset'
-        required: false
-        default: ''
-
-      base_image_preset:
-        description: 'combo: 基础 Linux 镜像；选 custom 时填写 base_image'
-        required: true
-        type: choice
-        default: 'ubuntu:24.04'
-        options:
-          - 'ubuntu:22.04'
-          - 'ubuntu:24.04'
-          - 'debian:12'
-          - 'debian:bookworm-slim'
-          - 'alpine:3.20'
-          - 'rockylinux:9'
-          - 'almalinux:9'
-          - custom
-
-      base_image:
-        description: 'combo: 自定义基础镜像；填写后覆盖 base_image_preset'
-        required: false
-        default: ''
-
-      runtime_image_preset:
-        description: 'combo: 运行时/服务镜像；选 custom 时填写 runtime_image'
-        required: true
-        type: choice
-        default: 'python:3.12-slim'
-        options:
-          - 'python:3.12-slim'
-          - 'python:3.13-slim'
-          - 'node:22-bookworm-slim'
-          - 'node:22-alpine'
-          - 'getmeili/meilisearch:v1.11'
-          - 'docker.elastic.co/elasticsearch/elasticsearch:8.14.3'
-          - custom
-
-      runtime_image:
-        description: 'combo: 自定义运行时镜像；填写后覆盖 runtime_image_preset'
+        description: '自定义完整镜像名；填写后覆盖 preset'
         required: false
         default: ''
 
       package_profile:
-        description: '系统依赖预设；Python/Node 原生扩展编译失败时选对应 build'
+        description: '系统依赖预设；默认 auto'
         required: true
         type: choice
         default: auto
@@ -103,24 +55,26 @@ on:
         default: ''
 
       image_name:
-        description: '输出镜像名称，不要带 tag'
-        required: true
-        default: 'universal-runtime'
+        description: '输出镜像名称；留空自动从 single_image 生成'
+        required: false
+        default: ''
 
       image_tag:
-        description: '输出镜像标签'
-        required: true
-        default: 'latest'
+        description: '输出镜像标签；留空自动从 single_image tag 生成'
+        required: false
+        default: ''
+
+      release_tag:
+        description: 'Release 标签名；留空自动用 image_name-image_tag'
+        required: false
+        default: ''
 
       platforms:
         description: '目标平台，多个用英文逗号分隔'
         required: true
         default: 'linux/amd64,linux/arm64'
 
-      release_tag:
-        description: 'Release 标签名'
-        required: true
-        default: 'universal-runtime-latest'
+run-name: Single ${{ inputs.single_image || inputs.single_image_preset }}
 
 permissions:
   contents: write
@@ -129,26 +83,21 @@ jobs:
   build_and_release:
     runs-on: ubuntu-22.04
     env:
-      INPUT_BUILD_MODE: ${{ inputs.build_mode }}
       INPUT_SINGLE_IMAGE_PRESET: ${{ inputs.single_image_preset }}
       INPUT_SINGLE_IMAGE: ${{ inputs.single_image }}
-      INPUT_BASE_IMAGE_PRESET: ${{ inputs.base_image_preset }}
-      INPUT_BASE_IMAGE: ${{ inputs.base_image }}
-      INPUT_RUNTIME_IMAGE_PRESET: ${{ inputs.runtime_image_preset }}
-      INPUT_RUNTIME_IMAGE: ${{ inputs.runtime_image }}
       INPUT_PACKAGE_PROFILE: ${{ inputs.package_profile }}
       INPUT_INSTALL_PACKAGES: ${{ inputs.install_packages }}
       INPUT_PYTHON_PACKAGES: ${{ inputs.python_packages }}
       INPUT_NODE_PACKAGES: ${{ inputs.node_packages }}
       INPUT_IMAGE_NAME: ${{ inputs.image_name }}
       INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
-      INPUT_PLATFORMS: ${{ inputs.platforms }}
       INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
+      INPUT_PLATFORMS: ${{ inputs.platforms }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate and prepare inputs
+      - name: Prepare inputs
         id: prepare
         shell: bash
         run: |
@@ -185,7 +134,7 @@ jobs:
             local label="$1"
             local value="$2"
             reject_newline "$label" "$value"
-            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]]; then
+            if [[ -z "$value" || ! "$value" =~ ^[a-z0-9][a-z0-9._/:@-]*$ ]]; then
               echo "::error::${label} 不是有效的 Docker 镜像引用: ${value}"
               exit 1
             fi
@@ -194,7 +143,7 @@ jobs:
           validate_image_name() {
             local value="$1"
             reject_newline "image_name" "$value"
-            if [[ -z "$value" || ! "$value" =~ ^[A-Za-z0-9][A-Za-z0-9._/:@-]*$ ]]; then
+            if [[ -z "$value" || ! "$value" =~ ^[a-z0-9][a-z0-9._:/-]*$ ]]; then
               echo "::error::image_name 不是有效的镜像名: ${value}"
               exit 1
             fi
@@ -203,6 +152,18 @@ jobs:
               echo "::error::image_name 不要带 tag，请把 tag 填到 image_tag"
               exit 1
             fi
+          }
+
+          sanitize_tag() {
+            local value="$1"
+            value="$(printf '%s' "$value" | sed -E 's#[^A-Za-z0-9_.-]+#-#g; s#^[.-]+##; s#[.-]+$##')"
+            if [[ -z "$value" ]]; then
+              value="latest"
+            fi
+            if [[ ! "$value" =~ ^[A-Za-z0-9_] ]]; then
+              value="v${value}"
+            fi
+            printf '%.128s' "$value"
           }
 
           validate_tag() {
@@ -225,19 +186,53 @@ jobs:
           }
 
           resolve_preset() {
-            local label="$1"
-            local preset="$2"
-            local custom="$3"
+            local preset="$1"
+            local custom="$2"
             custom="$(trim "$custom")"
             if [[ -n "$custom" ]]; then
               printf '%s' "$custom"
               return
             fi
             if [[ "$preset" == "custom" || -z "$preset" ]]; then
-              echo "::error::${label} 选择 custom 时必须填写自定义值" >&2
+              echo "::error::选择 custom 时必须填写 single_image" >&2
               exit 1
             fi
             printf '%s' "$preset"
+          }
+
+          derive_image_defaults() {
+            local ref="$1"
+            local no_digest="${ref%%@*}"
+            local digest=""
+            local repo
+            local tag
+            local name
+
+            if [[ "$ref" == *@* ]]; then
+              digest="${ref#*@}"
+            fi
+
+            local last_segment="${no_digest##*/}"
+            if [[ "$last_segment" == *:* ]]; then
+              tag="${last_segment##*:}"
+              repo="${no_digest%:*}"
+            else
+              tag="latest"
+              repo="$no_digest"
+            fi
+
+            name="${repo##*/}"
+            name="$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]' | sed -E 's#[^a-z0-9._-]+#-#g; s#^[._-]+##; s#[._-]+$##')"
+            if [[ -z "$name" ]]; then
+              name="universal-runtime"
+            fi
+
+            if [[ -n "$digest" && "$tag" == "latest" ]]; then
+              tag="digest-$(printf '%s' "$digest" | sed -E 's#[^A-Za-z0-9_.-]+#-#g' | cut -c1-48)"
+            fi
+            tag="$(sanitize_tag "$tag")"
+
+            printf '%s\n%s\n' "$name" "$tag"
           }
 
           normalize_platforms() {
@@ -264,7 +259,13 @@ jobs:
             printf '%s' "$result"
           }
 
-          BUILD_MODE="$(trim "$INPUT_BUILD_MODE")"
+          SOURCE_IMAGE="$(resolve_preset "$INPUT_SINGLE_IMAGE_PRESET" "$INPUT_SINGLE_IMAGE")"
+          validate_image_ref "single_image" "$SOURCE_IMAGE"
+
+          mapfile -t defaults < <(derive_image_defaults "$SOURCE_IMAGE")
+          DEFAULT_IMAGE_NAME="${defaults[0]}"
+          DEFAULT_IMAGE_TAG="${defaults[1]}"
+
           IMAGE_NAME="$(trim "$INPUT_IMAGE_NAME")"
           IMAGE_TAG="$(trim "$INPUT_IMAGE_TAG")"
           RELEASE_TAG="$(trim "$INPUT_RELEASE_TAG")"
@@ -274,27 +275,17 @@ jobs:
           NODE_PACKAGES="$(normalize_list "$INPUT_NODE_PACKAGES")"
           PLATFORMS="$(normalize_platforms "$INPUT_PLATFORMS")"
 
-          case "$BUILD_MODE" in
-            single)
-              SOURCE_IMAGE="$(resolve_preset "single_image" "$INPUT_SINGLE_IMAGE_PRESET" "$INPUT_SINGLE_IMAGE")"
-              validate_image_ref "single_image" "$SOURCE_IMAGE"
-              write_env "FINAL_DOCKERFILE" "Dockerfile.single"
-              write_env "FINAL_SOURCE_IMAGE" "$SOURCE_IMAGE"
-              ;;
-            combo)
-              BASE_IMAGE="$(resolve_preset "base_image" "$INPUT_BASE_IMAGE_PRESET" "$INPUT_BASE_IMAGE")"
-              RUNTIME_IMAGE="$(resolve_preset "runtime_image" "$INPUT_RUNTIME_IMAGE_PRESET" "$INPUT_RUNTIME_IMAGE")"
-              validate_image_ref "base_image" "$BASE_IMAGE"
-              validate_image_ref "runtime_image" "$RUNTIME_IMAGE"
-              write_env "FINAL_DOCKERFILE" "Dockerfile.combo"
-              write_env "FINAL_BASE_IMAGE" "$BASE_IMAGE"
-              write_env "FINAL_RUNTIME_IMAGE" "$RUNTIME_IMAGE"
-              ;;
-            *)
-              echo "::error::未知 build_mode: ${BUILD_MODE}"
-              exit 1
-              ;;
-          esac
+          if [[ -z "$IMAGE_NAME" ]]; then
+            IMAGE_NAME="$DEFAULT_IMAGE_NAME"
+          fi
+          if [[ -z "$IMAGE_TAG" ]]; then
+            IMAGE_TAG="$DEFAULT_IMAGE_TAG"
+          else
+            IMAGE_TAG="$(sanitize_tag "$IMAGE_TAG")"
+          fi
+          if [[ -z "$RELEASE_TAG" ]]; then
+            RELEASE_TAG="$(printf '%s-%s' "$IMAGE_NAME" "$IMAGE_TAG" | sed -E 's#[^A-Za-z0-9._/-]+#-#g; s#^-+|-+$##g')"
+          fi
 
           case "$PACKAGE_PROFILE" in
             auto|none|runtime|python-build|node-build|python-node-build) ;;
@@ -310,7 +301,8 @@ jobs:
 
           SAFE_FILE_PREFIX="$(printf '%s-%s' "$IMAGE_NAME" "$IMAGE_TAG" | sed -E 's#[^A-Za-z0-9_.-]+#-#g; s#^-+|-+$##g')"
 
-          write_env "FINAL_BUILD_MODE" "$BUILD_MODE"
+          write_env "FINAL_DOCKERFILE" "Dockerfile.single"
+          write_env "FINAL_SOURCE_IMAGE" "$SOURCE_IMAGE"
           write_env "FINAL_IMAGE_NAME" "$IMAGE_NAME"
           write_env "FINAL_IMAGE_TAG" "$IMAGE_TAG"
           write_env "FINAL_RELEASE_TAG" "$RELEASE_TAG"
@@ -321,6 +313,7 @@ jobs:
           write_env "FINAL_PLATFORMS" "$PLATFORMS"
           write_env "FINAL_SAFE_FILE_PREFIX" "$SAFE_FILE_PREFIX"
 
+          echo "image_name=${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
           echo "image_tag=${IMAGE_TAG}" >> "$GITHUB_OUTPUT"
           echo "release_tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
@@ -343,32 +336,17 @@ jobs:
             archive="${FINAL_SAFE_FILE_PREFIX}-${platform_tag}.tar"
 
             echo "========== Building ${image_ref} for ${platform} =========="
-            if [[ "$FINAL_BUILD_MODE" == "single" ]]; then
-              docker buildx build \
-                --platform "$platform" \
-                --file "$FINAL_DOCKERFILE" \
-                --build-arg "SOURCE_IMAGE=${FINAL_SOURCE_IMAGE}" \
-                --build-arg "PACKAGE_PROFILE=${FINAL_PACKAGE_PROFILE}" \
-                --build-arg "INSTALL_PACKAGES=${FINAL_INSTALL_PACKAGES}" \
-                --build-arg "PYTHON_PACKAGES=${FINAL_PYTHON_PACKAGES}" \
-                --build-arg "NODE_PACKAGES=${FINAL_NODE_PACKAGES}" \
-                --tag "$image_ref" \
-                --output "type=docker,dest=${archive}" \
-                .
-            else
-              docker buildx build \
-                --platform "$platform" \
-                --file "$FINAL_DOCKERFILE" \
-                --build-arg "BASE_IMAGE=${FINAL_BASE_IMAGE}" \
-                --build-arg "RUNTIME_IMAGE=${FINAL_RUNTIME_IMAGE}" \
-                --build-arg "PACKAGE_PROFILE=${FINAL_PACKAGE_PROFILE}" \
-                --build-arg "INSTALL_PACKAGES=${FINAL_INSTALL_PACKAGES}" \
-                --build-arg "PYTHON_PACKAGES=${FINAL_PYTHON_PACKAGES}" \
-                --build-arg "NODE_PACKAGES=${FINAL_NODE_PACKAGES}" \
-                --tag "$image_ref" \
-                --output "type=docker,dest=${archive}" \
-                .
-            fi
+            docker buildx build \
+              --platform "$platform" \
+              --file "$FINAL_DOCKERFILE" \
+              --build-arg "SOURCE_IMAGE=${FINAL_SOURCE_IMAGE}" \
+              --build-arg "PACKAGE_PROFILE=${FINAL_PACKAGE_PROFILE}" \
+              --build-arg "INSTALL_PACKAGES=${FINAL_INSTALL_PACKAGES}" \
+              --build-arg "PYTHON_PACKAGES=${FINAL_PYTHON_PACKAGES}" \
+              --build-arg "NODE_PACKAGES=${FINAL_NODE_PACKAGES}" \
+              --tag "$image_ref" \
+              --output "type=docker,dest=${archive}" \
+              .
 
             gzip -9c "$archive" > "${archive}.gz"
             rm -f "$archive"
@@ -393,19 +371,13 @@ jobs:
           set -euo pipefail
           {
             echo "body<<EOF"
-            echo "## Universal Docker Image"
+            echo "## Single Docker Image"
             echo ""
-            echo "- Build mode: \`${FINAL_BUILD_MODE}\`"
+            echo "- Source image: \`${FINAL_SOURCE_IMAGE}\`"
             echo "- Dockerfile: \`${FINAL_DOCKERFILE}\`"
             echo "- Image prefix: \`${FINAL_IMAGE_NAME}:${FINAL_IMAGE_TAG}-<arch>\`"
             echo "- Platforms: \`${FINAL_PLATFORMS}\`"
             echo "- Package profile: \`${FINAL_PACKAGE_PROFILE}\`"
-            if [[ "$FINAL_BUILD_MODE" == "single" ]]; then
-              echo "- Source image: \`${FINAL_SOURCE_IMAGE}\`"
-            else
-              echo "- Base image: \`${FINAL_BASE_IMAGE}\`"
-              echo "- Runtime image: \`${FINAL_RUNTIME_IMAGE}\`"
-            fi
             echo ""
             echo "### Load"
             echo "\`\`\`bash"

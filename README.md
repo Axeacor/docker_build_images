@@ -1,18 +1,19 @@
-# Universal Docker Build
+# Docker Build Images
 
-这个仓库提供一个 GitHub Actions 手动工作流，用来构建并导出离线 Docker 镜像包。
+这个仓库提供两个 GitHub Actions 手动工作流，用来构建并导出离线 Docker 镜像包。
 
 保留文件：
 
-- `.github/workflows/universal-docker-matrix.yml`
+- `.github/workflows/docker-single.yml`
+- `.github/workflows/docker-combo.yml`
 - `Dockerfile.single`
 - `Dockerfile.combo`
 
-## 构建模式
+## 工作流入口
 
-### single
+### Docker Build - Single
 
-基于一个完整镜像继续安装可选依赖，适合直接构建：
+基于一个完整镜像继续安装可选依赖。适合直接构建：
 
 - `node:22-alpine`
 - `node:22-bookworm-slim`
@@ -23,7 +24,6 @@
 
 常用填写：
 
-- `build_mode`: `single`
 - `single_image_preset`: 选择常用镜像，或选 `custom`
 - `single_image`: 自定义镜像名；填写后会覆盖 preset
 - `package_profile`: 默认 `auto`
@@ -31,15 +31,33 @@
 - `node_packages`: 需要额外安装的 npm 全局包
 - `install_packages`: 需要额外安装的系统包
 
-### combo
+### Docker Build - Combo
 
-以一个运行时镜像作为最终镜像，并记录一个基础 Linux 镜像来源。最终安装依赖时使用运行时镜像自己的包管理器，避免把 Alpine、Debian、RHEL 系文件系统硬拷贝到一起导致 ABI/动态库问题。
+选择基础 Linux 镜像和最终运行时镜像。最终安装依赖时使用运行时镜像自己的包管理器，避免把 Alpine、Debian、RHEL 系文件系统硬拷贝到一起导致 ABI/动态库问题。
 
 常用填写：
 
-- `build_mode`: `combo`
 - `base_image_preset` / `base_image`: 基础镜像信息
 - `runtime_image_preset` / `runtime_image`: 最终运行时镜像
+- `package_profile`: 默认 `auto`
+- `install_packages`: 需要额外安装的系统包
+
+## 自动生成输出名称
+
+`image_name`、`image_tag`、`release_tag` 都可以留空。
+
+Single 模式会从 `single_image` 自动推导：
+
+- `node:22-alpine` -> `image_name=node`、`image_tag=22-alpine`、`release_tag=node-22-alpine`
+- `python:3.12-slim` -> `image_name=python`、`image_tag=3.12-slim`、`release_tag=python-3.12-slim`
+- `docker.elastic.co/elasticsearch/elasticsearch:8.14.3` -> `image_name=elasticsearch`、`image_tag=8.14.3`
+
+Combo 模式会从 `base_image + runtime_image` 自动推导：
+
+- `ubuntu:24.04 + python:3.12-slim` -> `image_name=ubuntu-python`、`image_tag=24.04-3.12-slim`
+- `alpine:3.20 + node:22-alpine` -> `image_name=alpine-node`、`image_tag=3.20-22-alpine`
+
+GitHub Actions 原生表单不会在选择镜像后把输入框视觉上改成这些值；这些值是在工作流运行时计算出来的。需要自定义时，直接填写对应输入即可覆盖自动值。
 
 ## package_profile
 
@@ -61,12 +79,12 @@
 
 平台标签会追加到镜像 tag 后面，例如：
 
-- `universal-runtime:latest-amd64`
-- `universal-runtime:latest-arm64`
+- `node:22-alpine-amd64`
+- `node:22-alpine-arm64`
 
 离线导入：
 
 ```bash
-gzip -d universal-runtime-latest-amd64.tar.gz
-docker load -i universal-runtime-latest-amd64.tar
+gzip -d node-22-alpine-amd64.tar.gz
+docker load -i node-22-alpine-amd64.tar
 ```
