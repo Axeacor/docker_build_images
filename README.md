@@ -72,6 +72,13 @@ GitHub Actions 原生表单不会在选择镜像后把输入框视觉上改成�
 
 如果 `python:3.12+` 安装 pip 包失败，优先保持 `package_profile=auto`，或者手动选 `python-build`。如果 `node:22-alpine` 安装 npm 包失败，手动选 `node-build`。
 
+## Python pip 源
+
+Python 镜像会默认写入公司内部 PyPI 源：
+
+- `index-url`: `http://repo.pe2.cc/repository/pypi/simple`
+- `trusted-host`: `repo.pe2.cc`
+
 ## 输出
 
 工作流会按平台生成并上传：

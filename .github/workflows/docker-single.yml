@@ -334,7 +334,7 @@ jobs:
 
             gzip -9c "$archive" > "${archive}.gz"
             rm -f "$archive"
-          done < <(printf '%s' "$FINAL_PLATFORMS" | tr ',' '\n')
+          done < <(printf '%s\n' "$FINAL_PLATFORMS" | tr ',' '\n')
 
       - name: Verify generated archives
         shell: bash

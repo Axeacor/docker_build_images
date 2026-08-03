@@ -10,6 +10,8 @@ ARG PACKAGE_PROFILE=auto
 ARG INSTALL_PACKAGES=""
 ARG PYTHON_PACKAGES=""
 ARG NODE_PACKAGES=""
+ARG PIP_INDEX_URL="http://repo.pe2.cc/repository/pypi/simple"
+ARG PIP_TRUSTED_HOST="repo.pe2.cc"
 
 LABEL org.opencontainers.image.base.name="${RUNTIME_IMAGE}" \
       org.opencontainers.image.combo.base="${BASE_IMAGE}"
@@ -65,6 +67,17 @@ RUN set -eux; \
         none) echo "System packages requested, but no supported package manager was found" >&2; exit 1 ;; \
       esac; \
     }; \
+    configure_pip() { \
+      if [ -z "${PIP_INDEX_URL}" ] && [ -z "${PIP_TRUSTED_HOST}" ]; then return 0; fi; \
+      pip_cmd=""; \
+      if command -v python >/dev/null 2>&1 && python -m pip --version >/dev/null 2>&1; then pip_cmd="python -m pip"; \
+      elif command -v python3 >/dev/null 2>&1 && python3 -m pip --version >/dev/null 2>&1; then pip_cmd="python3 -m pip"; \
+      elif command -v pip >/dev/null 2>&1; then pip_cmd="pip"; \
+      elif command -v pip3 >/dev/null 2>&1; then pip_cmd="pip3"; \
+      else return 0; fi; \
+      if [ -n "${PIP_INDEX_URL}" ]; then $pip_cmd config set global.index-url "${PIP_INDEX_URL}"; fi; \
+      if [ -n "${PIP_TRUSTED_HOST}" ]; then $pip_cmd config set global.trusted-host "${PIP_TRUSTED_HOST}"; fi; \
+    }; \
     python_packages="$(normalize_list "${PYTHON_PACKAGES}")"; \
     node_packages="$(normalize_list "${NODE_PACKAGES}")"; \
     extra_packages="$(normalize_list "${INSTALL_PACKAGES}")"; \
@@ -83,6 +96,7 @@ RUN set -eux; \
     pm="$(detect_package_manager)"; \
     packages="$(profile_packages "$pm" "$profile")"; \
     install_system_packages "$pm" "${packages} ${extra_packages}"; \
+    configure_pip; \
     if command -v python >/dev/null 2>&1; then python --version; fi; \
     if command -v python3 >/dev/null 2>&1; then python3 --version; fi; \
     if command -v node >/dev/null 2>&1; then node --version; fi; \
