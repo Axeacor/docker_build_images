@@ -85,10 +85,11 @@ on:
         required: false
         default: ''
 
-      platforms:
-        description: '目标平台，多个用英文逗号分隔'
+      build_arm64:
+        description: '同时打包 linux/arm64'
         required: true
-        default: 'linux/amd64,linux/arm64'
+        type: boolean
+        default: false
 
 run-name: Combo ${{ inputs.base_image || inputs.base_image_preset }} + ${{ inputs.runtime_image || inputs.runtime_image_preset }}
 
@@ -110,7 +111,7 @@ jobs:
       INPUT_IMAGE_NAME: ${{ inputs.image_name }}
       INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
       INPUT_RELEASE_TAG: ${{ inputs.release_tag }}
-      INPUT_PLATFORMS: ${{ inputs.platforms }}
+      INPUT_BUILD_ARM64: ${{ inputs.build_arm64 }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -254,28 +255,11 @@ jobs:
             printf '%s\n%s\n' "$name" "$tag"
           }
 
-          normalize_platforms() {
-            local result=""
-            local platform
-            while IFS= read -r platform; do
-              platform="$(trim "$platform")"
-              [[ -z "$platform" ]] && continue
-              if [[ ! "$platform" =~ ^linux/(amd64|arm64|arm/v7|arm/v6|386|ppc64le|s390x|riscv64)$ ]]; then
-                echo "::error::不支持的平台: ${platform}" >&2
-                exit 1
-              fi
-              if [[ -z "$result" ]]; then
-                result="$platform"
-              else
-                result="${result},${platform}"
-              fi
-            done < <(printf '%s' "$1" | tr ',' '\n')
-
-            if [[ -z "$result" ]]; then
-              echo "::error::platforms 不能为空" >&2
-              exit 1
-            fi
-            printf '%s' "$result"
+          build_platforms() {
+            case "$1" in
+              true|True|TRUE|1|yes|YES) printf '%s' 'linux/amd64,linux/arm64' ;;
+              *) printf '%s' 'linux/amd64' ;;
+            esac
           }
 
           BASE_IMAGE="$(resolve_preset "base_image" "$INPUT_BASE_IMAGE_PRESET" "$INPUT_BASE_IMAGE")"
@@ -295,7 +279,7 @@ jobs:
           INSTALL_PACKAGES="$(normalize_list "$INPUT_INSTALL_PACKAGES")"
           PYTHON_PACKAGES="$(normalize_list "$INPUT_PYTHON_PACKAGES")"
           NODE_PACKAGES="$(normalize_list "$INPUT_NODE_PACKAGES")"
-          PLATFORMS="$(normalize_platforms "$INPUT_PLATFORMS")"
+          PLATFORMS="$(build_platforms "$INPUT_BUILD_ARM64")"
 
           if [[ -z "$IMAGE_NAME" ]]; then
             IMAGE_NAME="$DEFAULT_IMAGE_NAME"

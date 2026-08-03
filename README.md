@@ -30,6 +30,7 @@
 - `python_packages`: 需要额外安装的 pip 包
 - `node_packages`: 需要额外安装的 npm 全局包
 - `install_packages`: 需要额外安装的系统包
+- `build_arm64`: 默认关闭；开启后同时打包 `linux/arm64`
 
 ### Docker Build - Combo
 
@@ -41,6 +42,7 @@
 - `runtime_image_preset` / `runtime_image`: 最终运行时镜像
 - `package_profile`: 默认 `auto`
 - `install_packages`: 需要额外安装的系统包
+- `build_arm64`: 默认关闭；开启后同时打包 `linux/arm64`
 
 ## 自动生成输出名称
 
@@ -76,6 +78,8 @@ GitHub Actions 原生表单不会在选择镜像后把输入框视觉上改成�
 
 - GitHub Release 附件：`*.tar.gz`
 - GitHub Actions Artifact：`docker-images-<image_tag>`
+
+默认只构建 `linux/amd64`。开启 `build_arm64` 后，会同时构建 `linux/amd64` 和 `linux/arm64`。
 
 平台标签会追加到镜像 tag 后面，例如：
 
